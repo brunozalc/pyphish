@@ -1,2 +1,2 @@
 # pyphish
-Phising detection system written in Python
+Phishing detection system written in Python
