@@ -144,6 +144,47 @@
                                     </div>
                                 </div>
 
+                                <!-- Dashboard additions -->
+                                <div class="detail-card" id="chartsSection">
+                                    <h4>
+                                        [ gráficos — distribuição de
+                                        características ]
+                                    </h4>
+                                    <div id="chartsContent"></div>
+                                </div>
+
+                                <div class="detail-card" id="historySection">
+                                    <h4>[ histórico de URLs ]</h4>
+                                    <div
+                                        class="actions"
+                                        style="margin-bottom: 8px"
+                                    >
+                                        <button
+                                            class="btn btn-secondary"
+                                            id="exportJson"
+                                        >
+                                            exportar JSON
+                                        </button>
+                                        <button
+                                            class="btn btn-secondary"
+                                            id="exportCsv"
+                                        >
+                                            exportar CSV
+                                        </button>
+                                    </div>
+                                    <table class="details-table">
+                                        <tbody id="historyTable"></tbody>
+                                    </table>
+                                </div>
+
+                                <div
+                                    class="detail-card"
+                                    id="explanationsSection"
+                                >
+                                    <h4>[ explicações das verificações ]</h4>
+                                    <ul id="explanationsList"></ul>
+                                </div>
+
                                 <button
                                     class="btn btn-secondary"
                                     onclick="resetForm()"
@@ -362,7 +403,37 @@
                 const cellKey = row.insertCell(0);
                 const cellValue = row.insertCell(1);
                 cellKey.textContent = key;
-                cellValue.textContent = value;
+
+                // Pretty-print objects/arrays; render JSON in a <pre> if multi-line
+                let displayValue = value;
+
+                if (Array.isArray(value)) {
+                    const allPrimitives = value.every(
+                        (v) =>
+                            v === null ||
+                            ["string", "number", "boolean"].includes(typeof v),
+                    );
+                    displayValue = allPrimitives
+                        ? value.join(", ")
+                        : JSON.stringify(value, null, 2);
+                } else if (value && typeof value === "object") {
+                    displayValue = JSON.stringify(value, null, 2);
+                }
+
+                if (
+                    typeof displayValue === "string" &&
+                    (displayValue.includes("\n") ||
+                        displayValue.trim().startsWith("{") ||
+                        displayValue.trim().startsWith("["))
+                ) {
+                    const pre = document.createElement("pre");
+                    pre.style.whiteSpace = "pre-wrap";
+                    pre.style.margin = "0";
+                    pre.textContent = displayValue;
+                    cellValue.appendChild(pre);
+                } else {
+                    cellValue.textContent = displayValue;
+                }
             }
 
             function formatKey(key) {
@@ -382,6 +453,234 @@
                 document.getElementById("urlInput").value = "";
                 document.getElementById("urlInput").focus();
             }
+
+            // ---------- Dashboard / History / Charts ----------
+            function updateCharts(results) {
+                const charts = document.getElementById("chartsContent");
+                if (!charts) return;
+
+                const analysis = results?.checks?.url_analysis || {};
+                const details = analysis?.details || {};
+                const content = details?.content_analysis || {};
+                const redirects =
+                    (details?.redirect_chain || []).length > 0
+                        ? details.redirect_chain.length - 1
+                        : 0;
+                const inLists = results?.checks?.phishing_lists?.found_in_lists
+                    ? 1
+                    : 0;
+
+                const data = [
+                    { label: "Em listas de phishing", value: inLists },
+                    {
+                        label: "Heurísticas encontradas",
+                        value: (analysis.suspicious_features || []).length,
+                    },
+                    { label: "Redirecionamentos", value: redirects },
+                    { label: "Formulários", value: content.forms_found || 0 },
+                    {
+                        label: "Campos de senha",
+                        value: content.password_fields || 0,
+                    },
+                ];
+
+                const max = Math.max(1, ...data.map((d) => d.value));
+                const bar = (n, m) => {
+                    const len = Math.max(
+                        0,
+                        Math.min(20, Math.round((n / (m || 1)) * 20)),
+                    );
+                    return "█".repeat(len) + " ".repeat(20 - len);
+                };
+
+                const lines = data.map((d) => {
+                    const b = bar(d.value, max);
+                    return `${d.label.padEnd(26, " ")} | ${b} ${String(d.value).padStart(3, " ")}`;
+                });
+
+                charts.innerHTML = `<pre style="white-space:pre; font-family:inherit; font-size:.95rem; line-height:1.3;">${lines.join("\n")}</pre>`;
+            }
+
+            function updateHistory(results) {
+                try {
+                    const key = "pyphish_history";
+                    const list = JSON.parse(localStorage.getItem(key) || "[]");
+                    const record = {
+                        ts: new Date().toISOString(),
+                        url: results.url,
+                        risk_level: results.risk_level,
+                        risk_score: results.risk_score,
+                        is_phishing: !!results.is_phishing,
+                        in_lists:
+                            !!results?.checks?.phishing_lists?.found_in_lists,
+                    };
+                    list.push(record);
+                    while (list.length > 50) list.shift();
+                    localStorage.setItem(key, JSON.stringify(list));
+                    renderHistoryTableFromStorage();
+                } catch (e) {
+                    console.warn("history error", e);
+                }
+            }
+
+            function renderHistoryTableFromStorage() {
+                const tbody = document.getElementById("historyTable");
+                if (!tbody) return;
+                const list = JSON.parse(
+                    localStorage.getItem("pyphish_history") || "[]",
+                );
+                tbody.innerHTML = "";
+                const rows = [...list].reverse().slice(0, 20);
+                rows.forEach((r) => {
+                    const tr = document.createElement("tr");
+                    const td1 = document.createElement("td");
+                    const td2 = document.createElement("td");
+                    const date = new Date(r.ts);
+                    const when = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+                    td1.textContent = `${when} — ${r.url}`;
+                    td2.textContent = `${r.risk_level} (${r.risk_score}%)${r.in_lists ? " · em listas" : ""}`;
+                    tbody.appendChild(tr);
+                    tr.appendChild(td1);
+                    tr.appendChild(td2);
+                });
+            }
+
+            function exportHistoryJSON() {
+                const data = localStorage.getItem("pyphish_history") || "[]";
+                const blob = new Blob([data], { type: "application/json" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "pyphish_history.json";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            }
+
+            function exportHistoryCSV() {
+                const list = JSON.parse(
+                    localStorage.getItem("pyphish_history") || "[]",
+                );
+                const header = [
+                    "ts",
+                    "url",
+                    "risk_level",
+                    "risk_score",
+                    "is_phishing",
+                    "in_lists",
+                ];
+                const lines = [header.join(",")].concat(
+                    list.map((r) =>
+                        [
+                            r.ts,
+                            r.url,
+                            r.risk_level,
+                            r.risk_score,
+                            r.is_phishing,
+                            r.in_lists,
+                        ]
+                            .map((v) => String(v).replace(/"/g, '""'))
+                            .map((v) => `"${v}"`)
+                            .join(","),
+                    ),
+                );
+                const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "pyphish_history.csv";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            }
+
+            function populateExplanations() {
+                const ul = document.getElementById("explanationsList");
+                if (!ul) return;
+                const EXPL = [
+                    {
+                        k: "Em listas de phishing",
+                        v: "Se a URL aparece em bases conhecidas (PhishTank/OpenPhish), é forte indicador de phishing.",
+                    },
+                    {
+                        k: "Números no lugar de letras",
+                        v: "Typosquatting: trocar letras por números (ex.: 0->o, 1->l) para imitar marcas.",
+                    },
+                    {
+                        k: "Excesso de subdomínios",
+                        v: "Muitos subdomínios podem ocultar o domínio real e enganar o usuário.",
+                    },
+                    {
+                        k: "Caracteres especiais em excesso",
+                        v: "Hífens e underlines em excesso podem indicar tentativa de burlar filtros.",
+                    },
+                    {
+                        k: "TLD suspeito",
+                        v: "Certas TLDs são frequentemente usadas em campanhas maliciosas por serem mais baratas/menos reguladas.",
+                    },
+                    {
+                        k: "Uso de endereço IP",
+                        v: "Sites legítimos usam domínios; IP direto pode indicar infraestruturas temporárias.",
+                    },
+                    {
+                        k: "URL muito longa",
+                        v: "URLs longas escondem parâmetros suspeitos e dificultam a inspeção visual.",
+                    },
+                    {
+                        k: "Imitação de marca",
+                        v: "Domínio contendo/parecido com uma marca conhecida sugere engano intencional.",
+                    },
+                    {
+                        k: "DNS dinâmico",
+                        v: "Serviços de DDNS permitem troca rápida de IPs, comuns em campanhas de phishing.",
+                    },
+                    {
+                        k: "SSL incorreto/expirado",
+                        v: "Certificados inválidos ou prestes a expirar reduzem confiança no site.",
+                    },
+                    {
+                        k: "Redirecionamentos suspeitos",
+                        v: "Cadeias longas ou mudança de domínio podem levar a páginas armadilhas.",
+                    },
+                    {
+                        k: "Formulários e campos de senha",
+                        v: "Coleta de credenciais é comum em páginas de phishing.",
+                    },
+                    {
+                        k: "Palavras sensíveis",
+                        v: "Termos como 'senha', 'verificar', 'bank', 'cpf' sugerem coleta de dados.",
+                    },
+                    {
+                        k: "Domínio muito novo",
+                        v: "Frequente em golpes, pois domínios são criados e descartados rapidamente.",
+                    },
+                ];
+                ul.innerHTML = "";
+                EXPL.forEach((item) => {
+                    const li = document.createElement("li");
+                    li.innerHTML = `<strong>${item.k}:</strong> ${item.v}`;
+                    ul.appendChild(li);
+                });
+            }
+
+            // Wrap displayResults to include dashboard updates
+            const __origDisplayResults = displayResults;
+            displayResults = function (results) {
+                __origDisplayResults(results);
+                try {
+                    updateCharts(results);
+                    updateHistory(results);
+                    populateExplanations();
+                } catch (e) {
+                    console.warn("Extras error:", e);
+                }
+            };
+
+            document.addEventListener("DOMContentLoaded", () => {
+                renderHistoryTableFromStorage();
+                const j = document.getElementById("exportJson");
+                if (j) j.addEventListener("click", exportHistoryJSON);
+                const c = document.getElementById("exportCsv");
+                if (c) c.addEventListener("click", exportHistoryCSV);
+            });
         </script>
     </body>
 </html>
