@@ -139,7 +139,6 @@ header {
 }
 
 header::before {
-    content: "┌─";
     position: absolute;
     left: -2px;
     top: -2px;
@@ -176,7 +175,6 @@ header .subtitle {
 }
 
 .card::before {
-    content: "├─────";
     position: absolute;
     left: -2px;
     top: -1px;
