@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>PyPhish - Detector de Phishing</title>
+        <link
+            rel="stylesheet"
+            href="{{ url_for('static', filename='static.css') }}"
+        />
+    </head>
+    <body>
+        <div class="container">
+            <div class="term">
+                <div class="term-bar">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                    <span class="title">PyPhish · Terminal</span>
+                </div>
+                <div class="term-body">
+                    <header>
+                        <h1>PyPhish</h1>
+                        <p class="subtitle">
+                            Ferramenta de Detecção de Phishing
+                        </p>
+                    </header>
+
+                    <main>
+                        <section class="input-section">
+                            <div class="card">
+                                <h2>$ analisar-url</h2>
+                                <form id="analyzeForm">
+                                    <div class="form-group">
+                                        <label for="urlInput">URL alvo</label>
+                                        <div class="input-row">
+                                            <div class="prompt">>>></div>
+                                            <input
+                                                type="text"
+                                                id="urlInput"
+                                                name="url"
+                                                placeholder="https://exemplo.com"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group checkbox-group">
+                                        <input
+                                            type="checkbox"
+                                            id="checkLists"
+                                            name="check_lists"
+                                            checked
+                                        />
+                                        <label for="checkLists">
+                                            Verificar em listas conhecidas
+                                            (PhishTank / OpenPhish)
+                                        </label>
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        id="analyzeBtn"
+                                    >
+                                        executar
+                                    </button>
+                                </form>
+                            </div>
+                        </section>
+
+                        <section
+                            class="results-section"
+                            id="resultsSection"
+                            style="display: none"
+                        >
+                            <div class="card">
+                                <h2># resultados</h2>
+
+                                <!-- Status da URL -->
+                                <div class="result-status" id="resultStatus">
+                                    <div
+                                        class="status-indicator"
+                                        id="statusIndicator"
+                                    ></div>
+                                    <div class="status-text">
+                                        <h3 id="statusTitle"></h3>
+                                        <p id="statusUrl"></p>
+                                    </div>
+                                </div>
+
+                                <!-- Score de Risco -->
+                                <div class="risk-score">
+                                    <h3>nível de risco</h3>
+                                    <div class="risk-meter">
+                                        <div
+                                            class="risk-meter-fill"
+                                            id="riskMeterFill"
+                                        ></div>
+                                    </div>
+                                    <div class="risk-info">
+                                        <span
+                                            class="risk-level"
+                                            id="riskLevel"
+                                        ></span>
+                                        <span
+                                            class="risk-percentage"
+                                            id="riskPercentage"
+                                        ></span>
+                                    </div>
+                                </div>
+
+                                <!-- Resumo -->
+                                <div
+                                    class="summary-section"
+                                    id="summarySection"
+                                >
+                                    <h3>resumo</h3>
+                                    <ul id="summaryList"></ul>
+                                </div>
+
+                                <!-- Detalhes -->
+                                <div class="details-section">
+                                    <h3>detalhes</h3>
+
+                                    <!-- Verificação em Listas -->
+                                    <div
+                                        class="detail-card"
+                                        id="listsCheck"
+                                        style="display: none"
+                                    >
+                                        <h4>[ listas de phishing ]</h4>
+                                        <div id="listsCheckContent"></div>
+                                    </div>
+
+                                    <!-- Análise de URL -->
+                                    <div class="detail-card">
+                                        <h4>[ características da url ]</h4>
+                                        <table class="details-table">
+                                            <tbody
+                                                id="urlAnalysisTable"
+                                            ></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <button
+                                    class="btn btn-secondary"
+                                    onclick="resetForm()"
+                                >
+                                    limpar / nova análise
+                                </button>
+                            </div>
+                        </section>
+
+                        <!-- Loading -->
+                        <div class="loading" id="loading" style="display: none">
+                            <div class="spinner"></div>
+                            <p>processando… aguarde</p>
+                        </div>
+
+                        <!-- Error Message -->
+                        <div
+                            class="error-message"
+                            id="errorMessage"
+                            style="display: none"
+                        >
+                            <div class="card error-card">
+                                <h3>erro</h3>
+                                <p id="errorText"></p>
+                                <button
+                                    class="btn btn-secondary"
+                                    onclick="resetForm()"
+                                >
+                                    tentar novamente
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+
+                    <footer>
+                        <p>Projeto de Cybersecurity — Conceito C</p>
+                        <p class="warning">
+                            Aviso: uso educacional. Verifique URLs suspeitas com
+                            cautela.
+                        </p>
+                    </footer>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const form = document.getElementById("analyzeForm");
+            const resultsSection = document.getElementById("resultsSection");
+            const loading = document.getElementById("loading");
+            const errorMessage = document.getElementById("errorMessage");
+
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+
+                const url = document.getElementById("urlInput").value.trim();
+                const checkLists =
+                    document.getElementById("checkLists").checked;
+
+                // Esconde resultados anteriores e mostra loading
+                resultsSection.style.display = "none";
+                errorMessage.style.display = "none";
+                loading.style.display = "block";
+
+                try {
+                    const response = await fetch("/analyze", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            url: url,
+                            check_lists: checkLists,
+                        }),
+                    });
+
+                    const data = await response.json();
+
+                    if (data.error) {
+                        showError(data.message);
+                    } else {
+                        displayResults(data.results);
+                    }
+                } catch (error) {
+                    showError(
+                        "Erro ao conectar com o servidor: " + error.message,
+                    );
+                } finally {
+                    loading.style.display = "none";
+                }
+            });
+
+            function displayResults(results) {
+                // Status da URL
+                const statusIndicator =
+                    document.getElementById("statusIndicator");
+                const statusTitle = document.getElementById("statusTitle");
+                const statusUrl = document.getElementById("statusUrl");
+
+                statusUrl.textContent = results.url;
+
+                if (results.is_phishing) {
+                    statusIndicator.className =
+                        "status-indicator status-danger";
+                    statusTitle.textContent = "URL SUSPEITA DE PHISHING";
+                } else if (results.risk_level === "ALTO") {
+                    statusIndicator.className =
+                        "status-indicator status-danger";
+                    statusTitle.textContent = "ALTO RISCO";
+                } else if (results.risk_level === "MÉDIO") {
+                    statusIndicator.className =
+                        "status-indicator status-warning";
+                    statusTitle.textContent = "RISCO MÉDIO";
+                } else {
+                    statusIndicator.className = "status-indicator status-safe";
+                    statusTitle.textContent = "BAIXO RISCO";
+                }
+
+                // Score de Risco
+                const riskMeterFill = document.getElementById("riskMeterFill");
+                const riskLevel = document.getElementById("riskLevel");
+                const riskPercentage =
+                    document.getElementById("riskPercentage");
+
+                riskMeterFill.style.width = results.risk_score + "%";
+                riskLevel.textContent = results.risk_level;
+                riskPercentage.textContent = results.risk_score + "%";
+
+                if (results.risk_level === "ALTO") {
+                    riskMeterFill.style.backgroundImage =
+                        "linear-gradient(90deg, rgba(255,107,107,.9), rgba(255,107,107,.3))";
+                } else if (results.risk_level === "MÉDIO") {
+                    riskMeterFill.style.backgroundImage =
+                        "linear-gradient(90deg, rgba(240,173,78,.9), rgba(240,173,78,.3))";
+                } else {
+                    riskMeterFill.style.backgroundImage =
+                        "linear-gradient(90deg, rgba(90,247,142,.85), rgba(90,247,142,.25))";
+                }
+
+                // Resumo
+                const summaryList = document.getElementById("summaryList");
+                summaryList.innerHTML = "";
+
+                if (results.summary && results.summary.length > 0) {
+                    results.summary.forEach((item) => {
+                        const li = document.createElement("li");
+                        li.textContent = item;
+                        summaryList.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement("li");
+                    li.textContent =
+                        "Nenhuma característica suspeita detectada";
+                    summaryList.appendChild(li);
+                }
+
+                // Verificação em listas
+                if (
+                    results.checks.phishing_lists &&
+                    Object.keys(results.checks.phishing_lists).length > 0
+                ) {
+                    const listsCheck = document.getElementById("listsCheck");
+                    const listsCheckContent =
+                        document.getElementById("listsCheckContent");
+                    listsCheck.style.display = "block";
+                    listsCheckContent.innerHTML = "";
+
+                    const lists = results.checks.phishing_lists;
+
+                    for (const [listName, listData] of Object.entries(lists)) {
+                        if (listName !== "found_in_lists") {
+                            const p = document.createElement("p");
+                            p.innerHTML = `<strong>${listName}:</strong> ${listData.message}`;
+                            if (listData.is_phishing) {
+                                p.style.color = "#ff6b6b";
+                            }
+                            listsCheckContent.appendChild(p);
+                        }
+                    }
+                }
+
+                // Análise de URL
+                const urlAnalysisTable =
+                    document.getElementById("urlAnalysisTable");
+                urlAnalysisTable.innerHTML = "";
+
+                const analysis = results.checks.url_analysis;
+
+                addTableRow(urlAnalysisTable, "Domínio", analysis.domain);
+                addTableRow(
+                    urlAnalysisTable,
+                    "Features Suspeitas",
+                    analysis.suspicious_features.length,
+                );
+
+                if (analysis.details) {
+                    for (const [key, value] of Object.entries(
+                        analysis.details,
+                    )) {
+                        const formattedKey = formatKey(key);
+                        const formattedValue = Array.isArray(value)
+                            ? value.join(", ")
+                            : value;
+                        addTableRow(
+                            urlAnalysisTable,
+                            formattedKey,
+                            formattedValue,
+                        );
+                    }
+                }
+
+                resultsSection.style.display = "block";
+            }
+
+            function addTableRow(table, key, value) {
+                const row = table.insertRow();
+                const cellKey = row.insertCell(0);
+                const cellValue = row.insertCell(1);
+                cellKey.textContent = key;
+                cellValue.textContent = value;
+            }
+
+            function formatKey(key) {
+                return key
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, (l) => l.toUpperCase());
+            }
+
+            function showError(message) {
+                document.getElementById("errorText").textContent = message;
+                errorMessage.style.display = "block";
+            }
+
+            function resetForm() {
+                resultsSection.style.display = "none";
+                errorMessage.style.display = "none";
+                document.getElementById("urlInput").value = "";
+                document.getElementById("urlInput").focus();
+            }
+        </script>
+    </body>
+</html>
