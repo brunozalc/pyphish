@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Acesso bloqueado</title>
+    <link rel="stylesheet" href="warning.css" />
+  </head>
+  <body>
+    <main>
+      <h1>PyPhish Sentinel</h1>
+      <section class="alert">
+        <h2>Página bloqueada por suspeita de phishing</h2>
+        <p id="warnUrl"></p>
+        <p id="warnScore"></p>
+      </section>
+
+      <section class="actions">
+        <button id="btnBack">Voltar</button>
+        <button id="btnProceed">Prosseguir mesmo assim</button>
+      </section>
+
+      <section class="notes">
+        <h3>Por que bloqueamos?</h3>
+        <ul id="warnReasons"></ul>
+      </section>
+    </main>
+
+    <script src="../shared/messages.js"></script>
+    <script src="warning.js"></script>
+  </body>
+</html>

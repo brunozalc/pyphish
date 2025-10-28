@@ -15,8 +15,10 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/analyze", methods=["POST"])
+@app.route("/analyze", methods=["POST", "OPTIONS"])
 def analyze():
+    if request.method == "OPTIONS":
+        return ("", 204)
     try:
         data = request.get_json()
         url = data.get("url", "").strip()
@@ -51,6 +53,26 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({"error": True, "message": "Erro interno do servidor"}), 500
+
+
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin")
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers.pop("Access-Control-Allow-Credentials", None)
+
+    response.headers.setdefault(
+        "Access-Control-Allow-Headers", "Content-Type, Authorization"
+    )
+    response.headers.setdefault(
+        "Access-Control-Allow-Methods", "GET, POST, OPTIONS"
+    )
+    return response
 
 
 if __name__ == "__main__":

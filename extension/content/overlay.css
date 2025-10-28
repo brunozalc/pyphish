@@ -1,0 +1,92 @@
+.pyphish-tooltip {
+  position: absolute;
+  z-index: 2147483647;
+  padding: 6px 10px;
+  background: rgba(24, 24, 24, 0.95);
+  color: #f1f5f9;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.pyphish-tooltip.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.pyphish-tooltip.safe {
+  border-color: rgba(45, 212, 191, 0.6);
+}
+
+.pyphish-tooltip.warning {
+  border-color: rgba(250, 204, 21, 0.6);
+}
+
+.pyphish-tooltip.danger {
+  border-color: rgba(248, 113, 113, 0.7);
+}
+
+.pyphish-banner {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  max-width: 320px;
+  z-index: 2147483646;
+  padding: 12px 14px 12px 18px;
+  background: rgba(15, 15, 18, 0.95);
+  border-left: 4px solid #2dd4bf;
+  color: #e2e8f0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
+  border-radius: 10px;
+}
+
+.pyphish-banner.hidden {
+  display: none;
+}
+
+.pyphish-banner.safe {
+  border-left-color: #2dd4bf;
+}
+
+.pyphish-banner.warning {
+  border-left-color: #facc15;
+}
+
+.pyphish-banner.danger {
+  border-left-color: #f87171;
+}
+
+.pyphish-banner .pyphish-title {
+  margin: 0 32px 6px 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pyphish-banner .pyphish-desc {
+  margin: 0;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.pyphish-banner .pyphish-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+}
+
+.pyphish-banner .pyphish-close:hover {
+  color: #f8fafc;
+}

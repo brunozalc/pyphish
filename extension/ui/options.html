@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Configurações PyPhish Sentinel</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>PyPhish Sentinel</h1>
+      <p class="description">
+        Ajuste a sensibilidade da análise, defina listas confiáveis e controle as notificações do monitor.
+      </p>
+
+      <form id="settingsForm">
+        <section>
+          <h2>Nível de sensibilidade</h2>
+          <p class="hint">Define o limite de risco a partir do qual alertas são emitidos.</p>
+          <label><input type="radio" name="sensitivity" value="high" /> Alta (maior proteção)</label>
+          <label><input type="radio" name="sensitivity" value="medium" /> Moderada</label>
+          <label><input type="radio" name="sensitivity" value="low" /> Baixa (menos alertas)</label>
+        </section>
+
+        <section>
+          <h2>Preferências</h2>
+          <label class="toggle"><input type="checkbox" id="optAutoBlock" /> Bloquear automaticamente páginas suspeitas</label>
+          <label class="toggle"><input type="checkbox" id="optNotifications" /> Mostrar notificações</label>
+          <label class="toggle"><input type="checkbox" id="optHover" /> Analisar links ao passar o mouse</label>
+        </section>
+
+        <section>
+          <h2>Whitelist</h2>
+          <p class="hint">Informe um domínio por linha. Use <code>*exemplo.com</code> para permitir subdomínios.</p>
+          <textarea id="optWhitelist" rows="6" placeholder="exemplo.com
+*.bancoseguro.com"></textarea>
+        </section>
+
+        <section>
+          <h2>Endpoint da API</h2>
+          <input type="url" id="optApiBase" placeholder="http://localhost:5000" />
+          <p class="hint">Altere se seu back-end PyPhish estiver hospedado em outro endereço.</p>
+        </section>
+
+        <div class="actions">
+          <button type="submit">Salvar</button>
+          <span class="status" id="saveStatus"></span>
+        </div>
+      </form>
+    </main>
+
+    <script src="../shared/messages.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -68,6 +68,18 @@ body {
     margin: 0 auto;
 }
 
+.app-main {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
 /* Terminal frame */
 .term {
     background: var(--bg);
@@ -171,6 +183,9 @@ header .subtitle {
     border: 1px solid var(--border);
     padding: 16px;
     margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
     position: relative;
 }
 
@@ -185,7 +200,7 @@ header .subtitle {
 .card h2 {
     color: var(--yellow-bright);
     font-weight: 700;
-    margin-bottom: 12px;
+    margin-bottom: 0;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     font-size: 1rem;
@@ -199,7 +214,7 @@ header .subtitle {
 .card h3 {
     color: var(--blue-bright);
     font-weight: 600;
-    margin-bottom: 10px;
+    margin-bottom: 0;
 }
 
 .card h3::before {
@@ -210,8 +225,40 @@ header .subtitle {
 .card h4 {
     color: var(--magenta);
     font-weight: 600;
-    margin-bottom: 8px;
+    margin-bottom: 0;
     font-size: 0.95rem;
+}
+
+.card > *:last-child {
+    margin-bottom: 0;
+}
+
+.results-card {
+    gap: 20px;
+}
+
+.results-layout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+    align-items: start;
+}
+
+.results-primary .detail-card,
+.results-secondary .detail-card {
+    margin-bottom: 0;
+}
+
+.results-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
 }
 
 /* Input form */
@@ -368,7 +415,6 @@ label::before {
     padding: 12px 16px;
     background: var(--bg-alt);
     border: 2px dashed var(--border);
-    margin-bottom: 14px;
 }
 
 .status-indicator {
@@ -414,7 +460,7 @@ label::before {
 
 /* Risk meter - ASCII style */
 .risk-score {
-    margin: 14px 0;
+    margin: 0;
 }
 
 .risk-score h3 {
@@ -486,13 +532,16 @@ label::before {
     margin-left: 0;
     margin-top: 8px;
     list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .summary-section li {
-    margin-bottom: 6px;
     padding-left: 20px;
     position: relative;
     color: var(--fg-dim);
+    line-height: 1.5;
 }
 
 .summary-section li::before {
@@ -512,7 +561,9 @@ label::before {
     background: var(--bg);
     border: 1px solid var(--border);
     padding: 14px;
-    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .detail-card h4::before {
@@ -526,6 +577,7 @@ label::before {
     border-collapse: collapse;
     background: var(--bg);
     border: 2px solid var(--border);
+    table-layout: fixed;
     margin-top: 8px;
 }
 
@@ -543,19 +595,82 @@ label::before {
     font-size: 0.9rem;
 }
 
+.details-table .history-entry {
+    padding: 12px 10px;
+}
+
 .details-table td:first-child {
     width: 40%;
     color: var(--cyan);
     font-weight: 600;
 }
 
-.details-table td:first-child::after {
-    content: " ▸";
-    color: var(--comment);
+.details-table td.history-entry:first-child {
+    width: auto;
+    color: inherit;
+    font-weight: inherit;
+}
+
+.details-table td.history-entry::after {
+    content: none;
 }
 
 .details-table td:last-child {
     color: var(--fg-dim);
+    word-break: break-word;
+}
+
+.history-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.history-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 200px;
+    flex: 1 1 60%;
+}
+
+.history-date {
+    color: var(--fg);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.history-url {
+    color: var(--cyan);
+    word-break: break-all;
+}
+
+.history-badge {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    flex: 0 0 auto;
+    text-align: center;
+    min-width: 120px;
+}
+
+.badge-danger {
+    color: var(--red-bright);
+    border-color: rgba(196, 116, 110, 0.5);
+}
+
+.badge-warning {
+    color: var(--yellow-bright);
+    border-color: rgba(198, 178, 138, 0.45);
+}
+
+.badge-safe {
+    color: var(--green-bright);
+    border-color: rgba(143, 179, 130, 0.45);
 }
 
 /* Lists check results */
@@ -565,6 +680,27 @@ label::before {
     background: var(--bg-alt);
     border-left: 3px solid var(--border);
     font-size: 0.9rem;
+}
+
+#chartsContent pre {
+    margin: 0;
+    font-family: inherit;
+    font-size: 0.95rem;
+    line-height: 1.3;
+}
+
+#explanationsSection ul {
+    list-style: disc;
+    margin: 0;
+    padding-left: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--fg-dim);
+}
+
+#explanationsSection li {
+    line-height: 1.55;
 }
 
 /* Loading animation */
@@ -678,6 +814,10 @@ footer .warning {
         padding: 12px;
     }
 
+    .app-main {
+        gap: 20px;
+    }
+
     .term-body {
         padding: 16px;
     }
@@ -688,6 +828,14 @@ footer .warning {
 
     header h1 {
         font-size: 1.1rem;
+    }
+
+    .results-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .results-footer {
+        justify-content: center;
     }
 
     .card {
@@ -712,5 +860,15 @@ footer .warning {
 
     .prompt {
         font-size: 1rem;
+    }
+
+    .button-row {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .button-row .btn {
+        flex: 1;
+        justify-content: center;
     }
 }

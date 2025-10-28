@@ -2,7 +2,7 @@ import re
 import socket
 import ssl
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -31,7 +31,7 @@ class URLAnalyzer:
     }
     """
 
-    LETTER_NUMBER_SUBSTITUTIONS = {
+    LETTER_NUMBER_SUBSTITUTIONS: dict[str, str] = {
         "o": "0",
         "i": "1",
         "l": "1",
@@ -44,7 +44,7 @@ class URLAnalyzer:
     }
 
     # Naive, pragmatic list (expand as needed)
-    SUSPICIOUS_TLDS = [
+    SUSPICIOUS_TLDS: list[str] = [
         ".tk",
         ".ml",
         ".ga",
@@ -66,7 +66,7 @@ class URLAnalyzer:
         ".buzz",
     ]
 
-    DYNAMIC_DNS_SUFFIXES = [
+    DYNAMIC_DNS_SUFFIXES: list[str] = [
         "no-ip.com",
         "duckdns.org",
         "dyndns.org",
@@ -80,7 +80,7 @@ class URLAnalyzer:
         "twilightparadox.com",  # some custom ddns providers
     ]
 
-    COMMON_BRANDS = [
+    COMMON_BRANDS: list[str] = [
         "paypal",
         "amazon",
         "google",
@@ -106,12 +106,19 @@ class URLAnalyzer:
         "binance",
     ]
 
-    USER_AGENT = "PyPhish/1.0 (+https://example.local)"
+    USER_AGENT: str = "PyPhish/1.0 (+https://example.local)"
+
+    SCORE_WEIGHTS: dict[str, float] = {
+        "low": 0.12,
+        "medium": 0.22,
+        "high": 0.4,
+        "critical": 0.55,
+    }
 
     def __init__(self, http_timeout: int = 8, tcp_timeout: int = 6):
-        self.http_timeout = http_timeout
-        self.tcp_timeout = tcp_timeout
-        # Extend defaults without duplicating
+        self.http_timeout: int = http_timeout
+        self.tcp_timeout: int = tcp_timeout
+        # extend defaults without duplicating
         if ".gift" not in self.SUSPICIOUS_TLDS:
             self.SUSPICIOUS_TLDS.append(".gift")
         if "discord" not in self.COMMON_BRANDS:
@@ -120,11 +127,11 @@ class URLAnalyzer:
     # ---------------------------
     # Public API
     # ---------------------------
-    def analyze(self, url: str) -> Dict:
+    def analyze(self, url: str) -> dict[str, Any]:
         parsed = urlparse(url)
         domain = self._extract_domain(parsed)
 
-        results: Dict = {
+        results: dict[str, Any] = {
             "url": url,
             "domain": domain or "",
             "suspicious_features": [],
@@ -133,11 +140,14 @@ class URLAnalyzer:
         }
 
         if not domain:
-            results["suspicious_features"].append("URL inválida")
-            results["risk_score"] = 100
+            self._add_signal(results, "URL inválida", severity="critical", weight=1.0)
+            self._finalize_score(results)
+            results["suspicious_features"] = list(
+                dict.fromkeys(results["suspicious_features"])
+            )
             return results
 
-        # Heuristic checks
+        # heuristic checks
         self._check_number_substitution(domain, results)
         self._check_excessive_subdomains(domain, results)
         self._check_special_characters(domain, results)
@@ -146,7 +156,7 @@ class URLAnalyzer:
         self._check_url_length(url, results)
         self._check_brand_impersonation_and_similarity(domain, results)
 
-        # Dynamic DNS
+        # dynamic DNS
         self._check_dynamic_dns(domain, results)
 
         # SSL certificate
@@ -155,13 +165,12 @@ class URLAnalyzer:
         # WHOIS age
         self._check_whois_age(domain, results)
 
-        # Redirects + Basic content scan
+        # redirects + basic content scan
         self._check_redirects_and_content(url, results)
 
-        # Cap score
-        results["risk_score"] = max(0, min(100, results["risk_score"]))
+        self._finalize_score(results)
 
-        # Sort/remove duplicates in suspicious_features
+        # sort/remove duplicates in suspicious_features
         results["suspicious_features"] = list(
             dict.fromkeys(results["suspicious_features"])
         )
@@ -171,7 +180,44 @@ class URLAnalyzer:
     # ---------------------------
     # Heuristics
     # ---------------------------
-    def _check_number_substitution(self, domain: str, results: Dict):
+    def _add_signal(
+        self,
+        results: dict,
+        description: str,
+        severity: str = "low",
+        weight: Optional[float] = None,
+        include_summary: bool = True,
+    ) -> None:
+        """
+        Register a heuristic signal and map it to a probabilistic weight.
+        The weights are combined later assuming independent evidence,
+        avoiding unbounded additive scores while keeping the summary readable.
+        """
+        if weight is None:
+            weight = self.SCORE_WEIGHTS.get(severity, self.SCORE_WEIGHTS["low"])
+
+        breakdown = results.setdefault("details", {}).setdefault("score_breakdown", [])
+        breakdown.append(
+            {
+                "reason": description,
+                "severity": severity,
+                "weight": max(0.0, min(1.0, weight)),
+            }
+        )
+
+        if include_summary:
+            results["suspicious_features"].append(description)
+
+    def _finalize_score(self, results: dict) -> None:
+        """Aggregate all registered signals into a bounded 0-100 risk score."""
+        components = results.get("details", {}).get("score_breakdown", [])
+        residual_risk = 1.0
+        for comp in components:
+            residual_risk *= 1.0 - comp["weight"]
+        aggregated = 1.0 - residual_risk
+        results["risk_score"] = int(round(aggregated * 100))
+
+    def _check_number_substitution(self, domain: str, results: dict):
         occurrences: List[str] = []
         for letter, number in self.LETTER_NUMBER_SUBSTITUTIONS.items():
             if number in domain:
@@ -179,28 +225,40 @@ class URLAnalyzer:
                 occurrences.append(f"'{number}' pode substituir '{letter}'")
 
         if occurrences:
-            results["suspicious_features"].append(
-                "Números em substituição a letras (typosquatting)"
+            self._add_signal(
+                results,
+                "Números em substituição a letras (typosquatting)",
+                severity="medium",
+                weight=0.18,
             )
             results["details"]["number_substitution"] = occurrences
-            results["risk_score"] += 15
 
-    def _check_excessive_subdomains(self, domain: str, results: Dict):
+    def _check_excessive_subdomains(self, domain: str, results: dict):
         parts = domain.split(".")
         if parts and ":" in parts[-1]:
             parts[-1] = parts[-1].split(":")[0]
 
         subdomain_count = max(0, len(parts) - 2)
         if subdomain_count > 2:
-            results["suspicious_features"].append("Uso excessivo de subdomínios")
+            self._add_signal(
+                results,
+                "Uso excessivo de subdomínios",
+                severity="high",
+                weight=0.32,
+            )
             results["details"]["subdomain_count"] = subdomain_count
             results["details"]["subdomains"] = ".".join(parts[:-2])
-            results["risk_score"] += 20
         elif subdomain_count > 1:
             results["details"]["subdomain_count"] = subdomain_count
-            results["risk_score"] += 8
+            self._add_signal(
+                results,
+                "Domínio com múltiplos subdomínios incomuns",
+                severity="medium",
+                weight=0.14,
+                include_summary=False,
+            )
 
-    def _check_special_characters(self, domain: str, results: Dict):
+    def _check_special_characters(self, domain: str, results: dict):
         special_chars = ["-", "_"]
         found: List[str] = []
         for ch in special_chars:
@@ -209,40 +267,66 @@ class URLAnalyzer:
                 found.append(f"'{ch}' aparece {count} vezes")
 
         if found:
-            results["suspicious_features"].append("Caracteres especiais em excesso")
+            self._add_signal(
+                results,
+                "Caracteres especiais em excesso",
+                severity="medium",
+                weight=0.2,
+            )
             results["details"]["special_characters"] = found
-            results["risk_score"] += 10
 
-    def _check_suspicious_tld(self, domain: str, results: Dict):
+    def _check_suspicious_tld(self, domain: str, results: dict):
         d = domain.lower()
         for tld in self.SUSPICIOUS_TLDS:
             if d.endswith(tld):
-                results["suspicious_features"].append(f"TLD suspeito: {tld}")
+                self._add_signal(
+                    results,
+                    f"TLD suspeito: {tld}",
+                    severity="high",
+                    weight=0.4,
+                )
                 results["details"]["suspicious_tld"] = tld
-                results["risk_score"] += 25
                 break
 
-    def _check_ip_address(self, domain: str, results: Dict):
+    def _check_ip_address(self, domain: str, results: dict):
         host = domain.split(":")[0]
         ip_pattern = r"^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$"
         if re.match(ip_pattern, host):
-            results["suspicious_features"].append("URL usa endereço IP")
+            self._add_signal(
+                results,
+                "URL usa endereço IP",
+                severity="critical",
+                weight=0.6,
+            )
             results["details"]["ip_address"] = host
-            results["risk_score"] += 35
 
-    def _check_url_length(self, url: str, results: Dict):
+    def _check_url_length(self, url: str, results: dict):
         L = len(url)
         if L > 300:
-            results["suspicious_features"].append("URL extremamente longa")
+            self._add_signal(
+                results,
+                "URL extremamente longa",
+                severity="high",
+                weight=0.42,
+            )
             results["details"]["url_length"] = L
-            results["risk_score"] += 30
         elif L > 200:
-            results["suspicious_features"].append("URL muito longa")
+            self._add_signal(
+                results,
+                "URL muito longa",
+                severity="medium",
+                weight=0.26,
+            )
             results["details"]["url_length"] = L
-            results["risk_score"] += 20
         elif L > 100:
             results["details"]["url_length"] = L
-            results["risk_score"] += 10
+            self._add_signal(
+                results,
+                "URL longa",
+                severity="low",
+                weight=0.12,
+                include_summary=False,
+            )
 
     # Multi-level public suffixes (minimal set to reduce false positives)
     MULTI_LEVEL_TLDS = {
@@ -293,7 +377,7 @@ class URLAnalyzer:
             prev = cur
         return prev[-1]
 
-    def _check_brand_impersonation_and_similarity(self, domain: str, results: Dict):
+    def _check_brand_impersonation_and_similarity(self, domain: str, results: dict):
         d = domain.lower()
         sld = self._get_sld(d)
         sld_label = sld.split(".")[0] if "." in sld else sld
@@ -354,13 +438,15 @@ class URLAnalyzer:
                 )
 
                 if sld not in official_domains:
-                    results["suspicious_features"].append(
-                        f"Possível imitação de marca: {brand}"
+                    self._add_signal(
+                        results,
+                        f"Possível imitação de marca: {brand}",
+                        severity="high",
+                        weight=0.42,
                     )
                     results["details"].setdefault("brand_impersonation", []).append(
                         brand
                     )
-                    results["risk_score"] += 30
                     break
 
         # Similarity via Levenshtein (typosquatting): compare SLD label with brand
@@ -371,29 +457,35 @@ class URLAnalyzer:
                 best_match = (brand, dist)
 
         if best_match and best_match[1] in (1, 2):
-            results["suspicious_features"].append(
-                f"Semelhança com '{best_match[0]}' (distância de Levenshtein = {best_match[1]})"
+            self._add_signal(
+                results,
+                f"Semelhança com '{best_match[0]}' (distância de Levenshtein = {best_match[1]})",
+                severity="critical",
+                weight=0.5,
             )
             results["details"]["levenshtein_similarity"] = {
                 "brand": best_match[0],
                 "distance": best_match[1],
                 "compared_label": sld_label,
             }
-            results["risk_score"] += 35
 
-    def _check_dynamic_dns(self, domain: str, results: Dict):
+    def _check_dynamic_dns(self, domain: str, results: dict):
         base = self._get_sld(domain).lower()
         for suffix in self.DYNAMIC_DNS_SUFFIXES:
             if base.endswith(suffix):
-                results["suspicious_features"].append("Uso de DNS dinâmico")
+                self._add_signal(
+                    results,
+                    "Uso de DNS dinâmico",
+                    severity="high",
+                    weight=0.4,
+                )
                 results["details"]["dynamic_dns"] = suffix
-                results["risk_score"] += 30
                 return
 
     # ---------------------------
     # SSL Checks
     # ---------------------------
-    def _check_ssl_certificate(self, domain: str, results: Dict):
+    def _check_ssl_certificate(self, domain: str, results: dict):
         host = domain.split(":")[0]
         try:
             ctx = ssl.create_default_context()
@@ -406,8 +498,9 @@ class URLAnalyzer:
             ssl_issues: List[str] = []
             # Hostname match
             if not self._cert_matches_hostname(cert, host):
-                ssl_issues.append("Certificado não corresponde ao domínio")
-                results["risk_score"] += 25
+                issue = "Certificado não corresponde ao domínio"
+                ssl_issues.append(issue)
+                self._add_signal(results, issue, severity="high", weight=0.34)
 
             # Expiration
             not_after = cert.get("notAfter")
@@ -420,11 +513,24 @@ class URLAnalyzer:
                 results["details"]["ssl_days_to_expire"] = delta_days
 
                 if delta_days < 0:
-                    ssl_issues.append("Certificado expirado")
-                    results["risk_score"] += 40
+                    issue = "Certificado expirado"
+                    ssl_issues.append(issue)
+                    self._add_signal(
+                        results,
+                        issue,
+                        severity="critical",
+                        weight=0.55,
+                    )
                 elif delta_days <= 14:
-                    ssl_issues.append("Certificado expirando em breve")
-                    results["risk_score"] += 15
+                    issue = "Certificado expirando em breve"
+                    ssl_issues.append(issue)
+                    self._add_signal(
+                        results,
+                        issue,
+                        severity="medium",
+                        weight=0.2,
+                        include_summary=False,
+                    )
 
             issuer = cert.get("issuer")
             subject = cert.get("subject")
@@ -450,8 +556,12 @@ class URLAnalyzer:
                 or "nodename nor servname provided" in low
                 or "name or service not known" in low
             ):
-                results["suspicious_features"].append("Falha na resolução DNS (SSL)")
-                results["risk_score"] += 8
+                self._add_signal(
+                    results,
+                    "Falha na resolução DNS (SSL)",
+                    severity="low",
+                    weight=0.1,
+                )
 
     def _cert_matches_hostname(self, cert, hostname: str) -> bool:
         """
@@ -491,7 +601,7 @@ class URLAnalyzer:
     # ---------------------------
     # WHOIS Checks
     # ---------------------------
-    def _check_whois_age(self, domain: str, results: Dict):
+    def _check_whois_age(self, domain: str, results: dict):
         try:
             age_days = self._get_domain_age_days(domain)
             if age_days is None:
@@ -500,11 +610,19 @@ class URLAnalyzer:
 
             results["details"]["whois_age_days"] = age_days
             if age_days < 30:
-                results["suspicious_features"].append("Domínio muito novo (< 30 dias)")
-                results["risk_score"] += 30
+                self._add_signal(
+                    results,
+                    "Domínio muito novo (< 30 dias)",
+                    severity="high",
+                    weight=0.4,
+                )
             elif age_days < 90:
-                results["suspicious_features"].append("Domínio recente (< 90 dias)")
-                results["risk_score"] += 20
+                self._add_signal(
+                    results,
+                    "Domínio recente (< 90 dias)",
+                    severity="medium",
+                    weight=0.24,
+                )
         except Exception as e:
             results["details"]["whois_error"] = str(e)
 
@@ -624,7 +742,7 @@ class URLAnalyzer:
     # ---------------------------
     # Redirects + Content Scan
     # ---------------------------
-    def _check_redirects_and_content(self, url: str, results: Dict):
+    def _check_redirects_and_content(self, url: str, results: dict):
         headers = {"User-Agent": self.USER_AGENT}
         try:
             resp = requests.get(
@@ -643,20 +761,27 @@ class URLAnalyzer:
                 or "nodename nor servname provided" in lowered
                 or "name or service not known" in lowered
             ):
-                results["suspicious_features"].append("Falha na resolução DNS")
-                results["risk_score"] += 10
+                self._add_signal(
+                    results,
+                    "Falha na resolução DNS",
+                    severity="low",
+                    weight=0.12,
+                )
             return
 
         chain = [r.url for r in resp.history] + [resp.url]
         results["details"]["redirect_chain"] = chain
 
         # Redirect heuristics
-        redirect_issues: List[str] = []
         if len(resp.history) >= 3:
-            redirect_issues.append(
-                f"Número alto de redirecionamentos: {len(resp.history)}"
+            issue = f"Número alto de redirecionamentos: {len(resp.history)}"
+            self._add_signal(
+                results,
+                issue,
+                severity="medium",
+                weight=0.18,
             )
-            results["risk_score"] += 10
+            results["details"].setdefault("redirect_issues", []).append(issue)
 
         orig_domain = self._extract_domain(urlparse(url)).lower()
         final_domain = self._extract_domain(urlparse(resp.url)).lower()
@@ -665,11 +790,14 @@ class URLAnalyzer:
             and final_domain
             and self._get_sld(orig_domain) != self._get_sld(final_domain)
         ):
-            redirect_issues.append("Redirecionamento para outro domínio")
-            results["risk_score"] += 15
-
-        if redirect_issues:
-            results["suspicious_features"].extend(redirect_issues)
+            issue = "Redirecionamento para outro domínio"
+            self._add_signal(
+                results,
+                issue,
+                severity="medium",
+                weight=0.22,
+            )
+            results["details"].setdefault("redirect_issues", []).append(issue)
 
         # Basic content analysis (only if HTML-ish)
         ctype = resp.headers.get("Content-Type", "")
@@ -680,7 +808,7 @@ class URLAnalyzer:
         ):
             self._analyze_html_content(resp, results)
 
-    def _analyze_html_content(self, resp: requests.Response, results: Dict):
+    def _analyze_html_content(self, resp: requests.Response, results: dict):
         html = resp.text[:500_000]  # hard cap
         lowered = html.lower()
 
@@ -726,16 +854,26 @@ class URLAnalyzer:
 
         # Heuristics scoring
         if pwd_fields > 0:
-            results["suspicious_features"].append("Página com campo de senha")
-            results["risk_score"] += 25
-        if forms > 2:
-            results["suspicious_features"].append("Múltiplos formulários na página")
-            results["risk_score"] += 10
-        if found_kw:
-            results["suspicious_features"].append(
-                "Conteúdo solicita informações sensíveis"
+            self._add_signal(
+                results,
+                "Página com campo de senha",
+                severity="high",
+                weight=0.36,
             )
-            results["risk_score"] += 10
+        if forms > 2:
+            self._add_signal(
+                results,
+                "Múltiplos formulários na página",
+                severity="low",
+                weight=0.12,
+            )
+        if found_kw:
+            self._add_signal(
+                results,
+                "Conteúdo solicita informações sensíveis",
+                severity="medium",
+                weight=0.18,
+            )
 
         # Attempt to extract form action domains differing from current
         actions = re.findall(
@@ -758,10 +896,12 @@ class URLAnalyzer:
 
         if external_actions:
             details["external_form_actions"] = external_actions
-            results["suspicious_features"].append(
-                "Formulário envia dados para domínio diferente"
+            self._add_signal(
+                results,
+                "Formulário envia dados para domínio diferente",
+                severity="medium",
+                weight=0.25,
             )
-            results["risk_score"] += 15
 
     # ---------------------------
     # Utilities

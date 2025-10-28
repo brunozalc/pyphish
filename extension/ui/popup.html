@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>PyPhish Sentinel</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>PyPhish</h1>
+      <p class="subtitle">Monitor de risco em tempo real</p>
+    </header>
+
+    <section class="status" id="statusSection">
+      <div class="status-level" id="statusLevel">--</div>
+      <div class="status-details">
+        <p id="statusUrl">Carregando…</p>
+        <small id="statusSummary"></small>
+      </div>
+    </section>
+
+    <section class="controls">
+      <label class="toggle">
+        <input type="checkbox" id="autoBlockToggle" />
+        <span>Bloqueio automático</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="notificationsToggle" />
+        <span>Notificações</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="hoverToggle" />
+        <span>Verificar links ao passar o mouse</span>
+      </label>
+    </section>
+
+    <section class="manual-check">
+      <form id="manualForm">
+        <input type="url" id="manualInput" placeholder="https://exemplo.com" required />
+        <button type="submit">Analisar</button>
+      </form>
+    </section>
+
+    <footer>
+      <button id="openOptions">Configurações completas</button>
+    </footer>
+
+    <script src="../shared/messages.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

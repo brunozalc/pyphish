@@ -26,7 +26,7 @@
                         </p>
                     </header>
 
-                    <main>
+                    <main class="app-main">
                         <section class="input-section">
                             <div class="card">
                                 <h2>$ analisar-url</h2>
@@ -74,123 +74,136 @@
                             id="resultsSection"
                             style="display: none"
                         >
-                            <div class="card">
+                            <div class="card results-card">
                                 <h2># resultados</h2>
 
-                                <!-- Status da URL -->
-                                <div class="result-status" id="resultStatus">
-                                    <div
-                                        class="status-indicator"
-                                        id="statusIndicator"
-                                    ></div>
-                                    <div class="status-text">
-                                        <h3 id="statusTitle"></h3>
-                                        <p id="statusUrl"></p>
-                                    </div>
-                                </div>
-
-                                <!-- Score de Risco -->
-                                <div class="risk-score">
-                                    <h3>nível de risco</h3>
-                                    <div class="risk-meter">
+                                <div class="results-layout">
+                                    <div class="results-primary stack">
+                                        <!-- Status da URL -->
                                         <div
-                                            class="risk-meter-fill"
-                                            id="riskMeterFill"
-                                        ></div>
-                                    </div>
-                                    <div class="risk-info">
-                                        <span
-                                            class="risk-level"
-                                            id="riskLevel"
-                                        ></span>
-                                        <span
-                                            class="risk-percentage"
-                                            id="riskPercentage"
-                                        ></span>
-                                    </div>
-                                </div>
-
-                                <!-- Resumo -->
-                                <div
-                                    class="summary-section"
-                                    id="summarySection"
-                                >
-                                    <h3>resumo</h3>
-                                    <ul id="summaryList"></ul>
-                                </div>
-
-                                <!-- Detalhes -->
-                                <div class="details-section">
-                                    <h3>detalhes</h3>
-
-                                    <!-- Verificação em Listas -->
-                                    <div
-                                        class="detail-card"
-                                        id="listsCheck"
-                                        style="display: none"
-                                    >
-                                        <h4>[ listas de phishing ]</h4>
-                                        <div id="listsCheckContent"></div>
-                                    </div>
-
-                                    <!-- Análise de URL -->
-                                    <div class="detail-card">
-                                        <h4>[ características da url ]</h4>
-                                        <table class="details-table">
-                                            <tbody
-                                                id="urlAnalysisTable"
-                                            ></tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Dashboard additions -->
-                                <div class="detail-card" id="chartsSection">
-                                    <h4>
-                                        [ gráficos — distribuição de
-                                        características ]
-                                    </h4>
-                                    <div id="chartsContent"></div>
-                                </div>
-
-                                <div class="detail-card" id="historySection">
-                                    <h4>[ histórico de URLs ]</h4>
-                                    <div
-                                        class="actions"
-                                        style="margin-bottom: 8px"
-                                    >
-                                        <button
-                                            class="btn btn-secondary"
-                                            id="exportJson"
+                                            class="result-status"
+                                            id="resultStatus"
                                         >
-                                            exportar JSON
-                                        </button>
-                                        <button
-                                            class="btn btn-secondary"
-                                            id="exportCsv"
+                                            <div
+                                                class="status-indicator"
+                                                id="statusIndicator"
+                                            ></div>
+                                            <div class="status-text">
+                                                <h3 id="statusTitle"></h3>
+                                                <p id="statusUrl"></p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Score de Risco -->
+                                        <div class="risk-score">
+                                            <h3>nível de risco</h3>
+                                            <div class="risk-meter">
+                                                <div
+                                                    class="risk-meter-fill"
+                                                    id="riskMeterFill"
+                                                ></div>
+                                            </div>
+                                            <div class="risk-info">
+                                                <span
+                                                    class="risk-level"
+                                                    id="riskLevel"
+                                                ></span>
+                                                <span
+                                                    class="risk-percentage"
+                                                    id="riskPercentage"
+                                                ></span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Resumo -->
+                                        <div
+                                            class="summary-section"
+                                            id="summarySection"
                                         >
-                                            exportar CSV
-                                        </button>
+                                            <h3>resumo</h3>
+                                            <ul id="summaryList"></ul>
+                                        </div>
+
+                                        <!-- Verificação em Listas -->
+                                        <div
+                                            class="detail-card"
+                                            id="listsCheck"
+                                            style="display: none"
+                                        >
+                                            <h4>[ listas de phishing ]</h4>
+                                            <div id="listsCheckContent"></div>
+                                        </div>
+
+                                        <div
+                                            class="detail-card"
+                                            id="explanationsSection"
+                                        >
+                                            <h4>
+                                                [ explicações das verificações ]
+                                            </h4>
+                                            <ul id="explanationsList"></ul>
+                                        </div>
                                     </div>
-                                    <table class="details-table">
-                                        <tbody id="historyTable"></tbody>
-                                    </table>
+
+                                    <div class="results-secondary stack">
+                                        <!-- Detalhes -->
+                                        <div class="detail-card">
+                                            <h4>[ características da url ]</h4>
+                                            <table class="details-table">
+                                                <tbody
+                                                    id="urlAnalysisTable"
+                                                ></tbody>
+                                            </table>
+                                        </div>
+
+                                        <!-- Dashboard additions -->
+                                        <div
+                                            class="detail-card"
+                                            id="chartsSection"
+                                        >
+                                            <h4>
+                                                [ gráficos — distribuição de
+                                                características ]
+                                            </h4>
+                                            <div id="chartsContent"></div>
+                                        </div>
+
+                                        <div
+                                            class="detail-card"
+                                            id="historySection"
+                                        >
+                                            <h4>[ histórico de URLs ]</h4>
+                                            <div class="actions button-row">
+                                                <button
+                                                    class="btn btn-secondary"
+                                                    id="exportJson"
+                                                >
+                                                    exportar JSON
+                                                </button>
+                                                <button
+                                                    class="btn btn-secondary"
+                                                    id="exportCsv"
+                                                >
+                                                    exportar CSV
+                                                </button>
+                                            </div>
+                                            <table class="details-table">
+                                                <tbody
+                                                    id="historyTable"
+                                                ></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div
-                                    class="detail-card"
-                                    id="explanationsSection"
-                                >
-                                    <h4>[ explicações das verificações ]</h4>
-                                    <ul id="explanationsList"></ul>
+                                <div class="results-footer">
+                                    <button
+                                        class="btn btn-secondary"
+                                        onclick="resetForm()"
+                                    >
+                                        limpar / nova análise
+                                    </button>
                                 </div>
-
-                                <button
-                                    class="btn btn-secondary"
-                                    onclick="resetForm()"
-                                >
-                                    limpar / nova análise
-                                </button>
                             </div>
                         </section>
 
@@ -533,15 +546,32 @@
                 const rows = [...list].reverse().slice(0, 20);
                 rows.forEach((r) => {
                     const tr = document.createElement("tr");
-                    const td1 = document.createElement("td");
-                    const td2 = document.createElement("td");
+                    const td = document.createElement("td");
+                    td.colSpan = 2;
+                    td.className = "history-entry";
                     const date = new Date(r.ts);
                     const when = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-                    td1.textContent = `${when} — ${r.url}`;
-                    td2.textContent = `${r.risk_level} (${r.risk_score}%)${r.in_lists ? " · em listas" : ""}`;
+
+                    td.innerHTML = `
+                        <div class="history-row">
+                            <div class="history-meta">
+                                <span class="history-date">${when}</span>
+                                <span class="history-url">${r.url}</span>
+                            </div>
+                            <div class="history-badge ${
+                                r.risk_level === "ALTO"
+                                    ? "badge-danger"
+                                    : r.risk_level === "MÉDIO"
+                                      ? "badge-warning"
+                                      : "badge-safe"
+                            }">
+                                ${r.risk_level} (${r.risk_score}%)
+                            </div>
+                        </div>
+                    `;
+
                     tbody.appendChild(tr);
-                    tr.appendChild(td1);
-                    tr.appendChild(td2);
+                    tr.appendChild(td);
                 });
             }
 
