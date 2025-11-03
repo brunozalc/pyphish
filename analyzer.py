@@ -91,13 +91,11 @@ class URLAnalyzer:
         "instagram",
         "twitter",
         "linkedin",
-        "banco",
         "bradesco",
         "itau",
         "santander",
-        "caixa",
         "nubank",
-        "inter",
+        "bancointer",
         "whatsapp",
         "outlook",
         "office",
@@ -115,7 +113,7 @@ class URLAnalyzer:
         "critical": 0.55,
     }
 
-    def __init__(self, http_timeout: int = 8, tcp_timeout: int = 6):
+    def __init__(self, http_timeout: int = 2, tcp_timeout: int = 2):
         self.http_timeout: int = http_timeout
         self.tcp_timeout: int = tcp_timeout
         # extend defaults without duplicating
@@ -159,14 +157,23 @@ class URLAnalyzer:
         # dynamic DNS
         self._check_dynamic_dns(domain, results)
 
-        # SSL certificate
-        self._check_ssl_certificate(domain, results)
+        # SSL certificate (with timeout protection)
+        try:
+            self._check_ssl_certificate(domain, results)
+        except Exception as e:
+            results["details"]["ssl_error"] = str(e)
 
-        # WHOIS age
-        self._check_whois_age(domain, results)
+        # WHOIS age (with timeout protection)
+        try:
+            self._check_whois_age(domain, results)
+        except Exception as e:
+            results["details"]["whois_error"] = str(e)
 
-        # redirects + basic content scan
-        self._check_redirects_and_content(url, results)
+        # redirects + basic content scan (with timeout protection)
+        try:
+            self._check_redirects_and_content(url, results)
+        except Exception as e:
+            results["details"]["redirect_error"] = str(e)
 
         self._finalize_score(results)
 
@@ -450,24 +457,31 @@ class URLAnalyzer:
                     break
 
         # Similarity via Levenshtein (typosquatting): compare SLD label with brand
+        # Only flag if distance is 1 AND the strings are similar enough in length
         best_match: Optional[Tuple[str, int]] = None
         for brand in self.COMMON_BRANDS:
             dist = self._levenshtein(sld_label, brand)
             if best_match is None or dist < best_match[1]:
                 best_match = (brand, dist)
 
-        if best_match and best_match[1] in (1, 2):
-            self._add_signal(
-                results,
-                f"Semelhança com '{best_match[0]}' (distância de Levenshtein = {best_match[1]})",
-                severity="critical",
-                weight=0.5,
-            )
-            results["details"]["levenshtein_similarity"] = {
-                "brand": best_match[0],
-                "distance": best_match[1],
-                "compared_label": sld_label,
-            }
+        # Only flag distance=1 (single typo) and require similar length to avoid false positives
+        # Example: "lance" vs "banco" has distance=2, but they're unrelated words
+        if best_match and best_match[1] == 1:
+            # Require length similarity - within 2 characters
+            brand_len = len(best_match[0])
+            label_len = len(sld_label)
+            if abs(brand_len - label_len) <= 2:
+                self._add_signal(
+                    results,
+                    f"Semelhança com '{best_match[0]}' (distância de Levenshtein = {best_match[1]})",
+                    severity="high",
+                    weight=0.35,
+                )
+                results["details"]["levenshtein_similarity"] = {
+                    "brand": best_match[0],
+                    "distance": best_match[1],
+                    "compared_label": sld_label,
+                }
 
     def _check_dynamic_dns(self, domain: str, results: dict):
         base = self._get_sld(domain).lower()
@@ -489,9 +503,8 @@ class URLAnalyzer:
         host = domain.split(":")[0]
         try:
             ctx = ssl.create_default_context()
-            with socket.create_connection(
-                (host, 443), timeout=self.tcp_timeout
-            ) as sock:
+            # Reduce timeout even more for SSL checks
+            with socket.create_connection((host, 443), timeout=1) as sock:
                 with ctx.wrap_socket(sock, server_hostname=host) as ssock:
                     cert = ssock.getpeercert()
 
@@ -673,7 +686,7 @@ class URLAnalyzer:
 
     def _raw_whois_query(self, server: str, query: str) -> Optional[str]:
         try:
-            with socket.create_connection((server, 43), timeout=self.tcp_timeout) as s:
+            with socket.create_connection((server, 43), timeout=1) as s:
                 s.sendall((query + "\r\n").encode("utf-8", errors="ignore"))
                 s.shutdown(socket.SHUT_WR)
                 data = b""
@@ -748,7 +761,7 @@ class URLAnalyzer:
             resp = requests.get(
                 url,
                 headers=headers,
-                timeout=self.http_timeout,
+                timeout=1,
                 allow_redirects=True,
             )
         except Exception as e:
@@ -817,6 +830,8 @@ class URLAnalyzer:
         pwd_fields = len(re.findall(r"type\s*=\s*['\"]password['\"]", lowered))
         email_fields = len(re.findall(r"type\s*=\s*['\"]email['\"]", lowered))
 
+        # Only look for sensitive keywords if there are forms with password fields
+        # This reduces false positives on news sites and regular content
         sensitive_keywords = [
             "senha",
             "password",
@@ -827,23 +842,21 @@ class URLAnalyzer:
             "cartao",
             "cvv",
             "pin",
-            "bank",
-            "conta",
-            "login",
-            "verificar",
-            "verificação",
-            "verify",
+            "conta corrente",
+            "verificar identidade",
+            "verificação de conta",
+            "verify account",
+            "confirm identity",
             "2fa",
         ]
         found_kw = []
-        for kw in sensitive_keywords:
-            # Use word-like boundaries to avoid matching substrings inside brand names
-            pattern = r"(?<![a-z0-9])" + re.escape(kw) + r"(?![a-z0-9])"
-            if re.search(pattern, lowered):
-                # Avoid 'bank' hit solely because of 'nubank'
-                if kw == "bank" and "nubank" in lowered:
-                    continue
-                found_kw.append(kw)
+        # Only check keywords if page has password fields (likely a login form)
+        if pwd_fields > 0:
+            for kw in sensitive_keywords:
+                # Use word-like boundaries to avoid matching substrings
+                pattern = r"(?<![a-z0-9])" + re.escape(kw) + r"(?![a-z0-9])"
+                if re.search(pattern, lowered):
+                    found_kw.append(kw)
 
         details = results["details"].setdefault("content_analysis", {})
         details["forms_found"] = forms
@@ -860,17 +873,18 @@ class URLAnalyzer:
                 severity="high",
                 weight=0.36,
             )
-        if forms > 2:
+        if forms > 3:
             self._add_signal(
                 results,
                 "Múltiplos formulários na página",
                 severity="low",
-                weight=0.12,
+                weight=0.08,
             )
-        if found_kw:
+        if found_kw and pwd_fields > 0:
+            # Only flag sensitive content if there's also a password field
             self._add_signal(
                 results,
-                "Conteúdo solicita informações sensíveis",
+                "Formulário solicita credenciais sensíveis",
                 severity="medium",
                 weight=0.18,
             )

@@ -1,13 +1,36 @@
+import signal
 from typing import Dict
 
 from analyzer import URLAnalyzer
 from lists import PhishingListChecker
 
 
+class TimeoutError(Exception):
+    pass
+
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Operation timed out")
+
+
 class PhishingDetector:
     def __init__(self):
         self.list_checker = PhishingListChecker()
         self.url_analyzer = URLAnalyzer()
+        # Pre-load lists into memory to avoid reloading on every request
+        print("🔄 Pre-loading phishing lists into memory...")
+        self._warmup_cache()
+
+    def _warmup_cache(self):
+        """Pre-load all lists to speed up first request"""
+        try:
+            # This will load and cache all lists in the PhishingListChecker
+            self.list_checker.check_custom_database("http://warmup.test")
+            self.list_checker.check_phishtank("http://warmup.test")
+            self.list_checker.check_openphish("http://warmup.test")
+            print("✅ Lists pre-loaded successfully")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not pre-load all lists: {e}")
 
     def analyze_url(self, url: str, check_lists: bool = True) -> Dict:
         if not url.startswith(("http://", "https://")):
@@ -23,15 +46,40 @@ class PhishingDetector:
         }
 
         if check_lists:
-            results["checks"]["phishing_lists"] = self._check_phishing_lists(url)
+            try:
+                # Set a timeout for list checking (5 seconds max)
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(5)
 
-            if results["checks"]["phishing_lists"].get("found_in_lists"):
-                results["is_phishing"] = True
-                results["risk_level"] = "ALTO"
-                results["risk_score"] = 100
-                results["summary"].append(
-                    "URL encontrada em lista de phishing conhecida"
-                )
+                results["checks"]["phishing_lists"] = self._check_phishing_lists(url)
+
+                signal.alarm(0)  # Cancel the alarm
+
+                if results["checks"]["phishing_lists"].get("found_in_lists"):
+                    results["is_phishing"] = True
+                    results["risk_level"] = "ALTO"
+                    results["risk_score"] = 100
+                    results["summary"].append(
+                        "URL encontrada em lista de phishing conhecida"
+                    )
+            except TimeoutError:
+                signal.alarm(0)  # Cancel the alarm
+                print("⚠️  List checking timed out, skipping...")
+                results["checks"]["phishing_lists"] = {
+                    "custom_database": {"is_phishing": False, "message": "Timeout"},
+                    "phishtank": {"is_phishing": False, "message": "Timeout"},
+                    "openphish": {"is_phishing": False, "message": "Timeout"},
+                    "found_in_lists": False,
+                }
+            except Exception as e:
+                signal.alarm(0)  # Cancel the alarm
+                print(f"⚠️  List checking error: {e}")
+                results["checks"]["phishing_lists"] = {
+                    "custom_database": {"is_phishing": False, "message": str(e)},
+                    "phishtank": {"is_phishing": False, "message": str(e)},
+                    "openphish": {"is_phishing": False, "message": str(e)},
+                    "found_in_lists": False,
+                }
 
         url_analysis = self.url_analyzer.analyze(url)
         results["checks"]["url_analysis"] = url_analysis
@@ -51,23 +99,39 @@ class PhishingDetector:
             "found_in_lists": False,
         }
 
-        # Check custom database first (fastest)
-        is_phishing, message = self.list_checker.check_custom_database(url)
-        results["custom_database"] = {"is_phishing": is_phishing, "message": message}
-        if is_phishing:
-            results["found_in_lists"] = True
+        # Check custom database first (fastest and local)
+        try:
+            is_phishing, message = self.list_checker.check_custom_database(url)
+            results["custom_database"] = {
+                "is_phishing": is_phishing,
+                "message": message,
+            }
+            if is_phishing:
+                results["found_in_lists"] = True
+                return results  # Return immediately if found
+        except Exception as e:
+            print(f"⚠️  Custom DB check failed: {e}")
+            results["custom_database"] = {"is_phishing": False, "message": str(e)}
 
-        # Check PhishTank
-        is_phishing, message = self.list_checker.check_phishtank(url)
-        results["phishtank"] = {"is_phishing": is_phishing, "message": message}
-        if is_phishing:
-            results["found_in_lists"] = True
+        # Skip external list checks to avoid timeouts
+        # They will use cache if available
+        try:
+            is_phishing, message = self.list_checker.check_phishtank(url)
+            results["phishtank"] = {"is_phishing": is_phishing, "message": message}
+            if is_phishing:
+                results["found_in_lists"] = True
+        except Exception as e:
+            print(f"⚠️  PhishTank check failed: {e}")
+            results["phishtank"] = {"is_phishing": False, "message": str(e)}
 
-        # Check OpenPhish
-        is_phishing, message = self.list_checker.check_openphish(url)
-        results["openphish"] = {"is_phishing": is_phishing, "message": message}
-        if is_phishing:
-            results["found_in_lists"] = True
+        try:
+            is_phishing, message = self.list_checker.check_openphish(url)
+            results["openphish"] = {"is_phishing": is_phishing, "message": message}
+            if is_phishing:
+                results["found_in_lists"] = True
+        except Exception as e:
+            print(f"⚠️  OpenPhish check failed: {e}")
+            results["openphish"] = {"is_phishing": False, "message": str(e)}
 
         return results
 

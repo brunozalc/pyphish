@@ -16,7 +16,7 @@ class PhishingListChecker:
     ):
         self.phishtank_url = "http://data.phishtank.com/data/online-valid.csv"
         self.openphish_url = "https://openphish.com/feed.txt"
-        self.timeout = 30
+        self.timeout = 5
 
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
@@ -31,8 +31,13 @@ class PhishingListChecker:
 
         self.cache_duration = timedelta(hours=cache_duration_hours)
 
-        self.max_retries = 3
-        self.retry_delay = 10
+        self.max_retries = 1
+        self.retry_delay = 2
+
+        # In-memory caches to avoid re-reading files
+        self._custom_db_cache = None
+        self._phishtank_cache = None
+        self._openphish_cache = None
 
     def _is_file_cache_valid(self, cache_file: Path) -> bool:
         if not cache_file.exists():
@@ -42,6 +47,9 @@ class PhishingListChecker:
         return file_age < self.cache_duration
 
     def _load_custom_database(self) -> Optional[list]:
+        if self._custom_db_cache is not None:
+            return self._custom_db_cache
+
         if not self.custom_database_file.exists():
             return None
 
@@ -53,21 +61,31 @@ class PhishingListChecker:
                     if line.strip() and not line.startswith("#")
                 ]
                 print(f"📦 Database customizado carregado ({len(data)} entradas)")
+                self._custom_db_cache = data
                 return data
         except Exception as e:
             print(f"⚠️  Erro ao ler database customizado: {e}")
             return None
 
-    def _load_phishtank_from_cache(self) -> Optional[list]:
-        if not self._is_file_cache_valid(self.phishtank_cache_file):
+    def _load_phishtank_from_cache(self) -> Optional[set]:
+        if self._phishtank_cache is not None:
+            return self._phishtank_cache
+
+        # Always use cache if available, ignore expiration to avoid downloads/timeouts
+        if not self.phishtank_cache_file.exists():
             return None
 
         try:
+            urls = set()
             with open(self.phishtank_cache_file, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
-                data = list(reader)
-                print(f"📦 PhishTank carregado do cache ({len(data)} entradas)")
-                return data
+                # Only extract URLs, not all fields - much faster
+                for row in reader:
+                    if url := row.get("url"):
+                        urls.add(self._normalize_url(url))
+                print(f"📦 PhishTank carregado do cache ({len(urls)} entradas)")
+                self._phishtank_cache = urls
+                return urls
         except Exception as e:
             print(f"⚠️  Erro ao ler cache do PhishTank: {e}")
             return None
@@ -83,13 +101,18 @@ class PhishingListChecker:
             print(f"⚠️  Erro ao salvar cache do PhishTank: {e}")
 
     def _load_openphish_from_cache(self) -> Optional[list]:
-        if not self._is_file_cache_valid(self.openphish_cache_file):
+        if self._openphish_cache is not None:
+            return self._openphish_cache
+
+        # Always use cache if available, ignore expiration to avoid downloads/timeouts
+        if not self.openphish_cache_file.exists():
             return None
 
         try:
             with open(self.openphish_cache_file, "r") as f:
                 data = f.read().splitlines()
                 print(f"📦 OpenPhish carregado do cache ({len(data)} entradas)")
+                self._openphish_cache = data
                 return data
         except Exception as e:
             print(f"⚠️  Erro ao ler cache do OpenPhish: {e}")
@@ -153,37 +176,15 @@ class PhishingListChecker:
             phish_list = self._load_phishtank_from_cache()
 
             if phish_list is None:
-                headers = {"User-Agent": "phishtank/PyPhish"}
-                response = self._fetch_with_retry(self.phishtank_url, headers=headers)
-
-                if response is None:
-                    return False, "PhishTank: Máximo de tentativas excedido"
-
-                if response.status_code == 200:
-                    csv_content = response.text
-                    self._save_phishtank_to_cache(csv_content)
-
-                    from io import StringIO
-
-                    reader = csv.DictReader(StringIO(csv_content))
-                    phish_list = list(reader)
-                elif response.status_code == 429:
-                    # Try to use old cache if available
-                    if self.phishtank_cache_file.exists():
-                        print("⚠️  Rate limited. Usando cache antigo...")
-                        phish_list = self._load_phishtank_from_cache()
-                        if phish_list is None:
-                            return False, "PhishTank: Rate limited e cache inválido"
-                    else:
-                        return False, "PhishTank: Rate limited e sem cache disponível"
-                else:
-                    return False, f"PhishTank: Erro HTTP {response.status_code}"
+                # Skip download to avoid timeout - cache not available
+                return (
+                    False,
+                    "PhishTank: Cache indisponível (use update_cache.py para baixar)",
+                )
 
             normalized_url = self._normalize_url(url)
-            for entry in phish_list:
-                entry_url = entry.get("url", "")
-                if self._normalize_url(entry_url) == normalized_url:
-                    return True, "URL encontrada no PhishTank"
+            if normalized_url in phish_list:
+                return True, "URL encontrada no PhishTank"
 
             return False, "URL não encontrada no PhishTank"
 
@@ -195,23 +196,11 @@ class PhishingListChecker:
             phish_list = self._load_openphish_from_cache()
 
             if phish_list is None:
-                response = self._fetch_with_retry(self.openphish_url)
-
-                if response is None:
-                    return False, "OpenPhish: Máximo de tentativas excedido"
-
-                if response.status_code == 200:
-                    phish_list = response.text.splitlines()
-                    self._save_openphish_to_cache(phish_list)
-                elif response.status_code == 429:
-                    if self.openphish_cache_file.exists():
-                        print("⚠️  Rate limited. Usando cache antigo...")
-                        with open(self.openphish_cache_file, "r") as f:
-                            phish_list = f.read().splitlines()
-                    else:
-                        return False, "OpenPhish: Rate limited e sem cache disponível"
-                else:
-                    return False, f"OpenPhish: Erro HTTP {response.status_code}"
+                # Skip download to avoid timeout - cache not available
+                return (
+                    False,
+                    "OpenPhish: Cache indisponível (use update_cache.py para baixar)",
+                )
 
             normalized_url = self._normalize_url(url)
             for entry in phish_list:
