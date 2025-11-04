@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Email Link Detection</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .email-client {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2dd4bf; }
+        h2 { color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+        .email-message {
+            background: #fafafa;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #2dd4bf;
+            border-radius: 4px;
+        }
+        .email-header {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 10px;
+        }
+        .email-body {
+            color: #1e293b;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #fff;
+            border-radius: 8px;
+        }
+        /* Different link styles to simulate webmail clients */
+        .gmail-style a {
+            color: #1a73e8;
+            text-decoration: none;
+        }
+        .outlook-style a {
+            color: #0078d4;
+            text-decoration: underline;
+        }
+        .button-link {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #2dd4bf;
+            color: white !important;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+        .button-link:hover {
+            background: #14b8a6;
+        }
+        /* Simulate Gmail's link wrapper */
+        .gmail-wrapper {
+            display: inline;
+        }
+        /* Simulate tracked links */
+        .tracked-link {
+            color: #0ea5e9;
+        }
+        code {
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .status.working { background: #d1fae5; color: #065f46; }
+        .status.testing { background: #fef3c7; color: #92400e; }
+    </style>
+</head>
+<body>
+    <h1>📧 Test - Email Link Detection</h1>
+    
+    <div class="status testing">
+        <strong>How to test:</strong> Hover over the links below for ~250ms and check if tooltips appear
+    </div>
+
+    <div class="test-section">
+        <h2>1. Standard Email Links (Basic HTML)</h2>
+        <div class="email-message">
+            <div class="email-header">
+                <strong>From:</strong> security@paypal.com (SUSPICIOUS!)<br>
+                <strong>Subject:</strong> Urgent: Verify Your Account
+            </div>
+            <div class="email-body">
+                <p>Dear customer,</p>
+                <p>Your account has been temporarily suspended. Please verify your information:</p>
+                <p>
+                    <a href="https://paypa1.com/verify">Click here to verify your account</a>
+                </p>
+                <p>This is a standard <code>&lt;a href="..."&gt;</code> tag - should work! ✅</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section gmail-style">
+        <h2>2. Gmail-Style Links</h2>
+        <div class="email-message">
+            <div class="email-header">
+                <strong>From:</strong> noreply@amazon.com<br>
+                <strong>Subject:</strong> Your order has shipped
+            </div>
+            <div class="email-body">
+                <p>Your package is on its way!</p>
+                <p>
+                    Track your order: 
+                    <span class="gmail-wrapper">
+                        <a href="https://amazon-tracking.tk/track?id=123">
+                            amazon-tracking.tk
+                        </a>
+                    </span>
+                </p>
+                <p>Gmail often wraps links in spans - testing this structure.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section outlook-style">
+        <h2>3. Outlook-Style Links</h2>
+        <div class="email-message">
+            <div class="email-header">
+                <strong>From:</strong> support@microsoft.com<br>
+                <strong>Subject:</strong> Security Alert
+            </div>
+            <div class="email-body">
+                <p>We detected unusual activity on your account.</p>
+                <p>
+                    <a href="https://micros0ft.com/security">
+                        Review your security settings
+                    </a>
+                </p>
+                <p>Outlook uses underlined links - standard HTML.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Button-Style Links</h2>
+        <div class="email-message">
+            <div class="email-header">
+                <strong>From:</strong> security@nubank.com.br<br>
+                <strong>Subject:</strong> Confirme sua identidade
+            </div>
+            <div class="email-body">
+                <p>Detectamos uma tentativa de acesso à sua conta.</p>
+                <p>
+                    <a href="https://secure-nubank.tk/verify" class="button-link">
+                        Confirmar Identidade
+                    </a>
+                </p>
+                <p>Button-style links are common in email templates.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Tracked/Redirect Links</h2>
+        <div class="email-message">
+            <div class="email-header">
+                <strong>From:</strong> newsletter@empresa.com.br<br>
+                <strong>Subject:</strong> Clique aqui!
+            </div>
+            <div class="email-body">
+                <p>Ofertas especiais para você:</p>
+                <p>
+                    <a href="https://redirect.example.com/click?url=https://real-site.com&id=abc123" class="tracked-link">
+                        Ver ofertas (link with tracking)
+                    </a>
+                </p>
+                <p>Many email services use tracking redirects.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>6. Gmail SafeBrowsing Redirect</h2>
+        <div class="email-message">
+            <div class="email-header">
+                <strong>From:</strong> contato@site.com<br>
+                <strong>Subject:</strong> Link importante
+            </div>
+            <div class="email-body">
+                <p>Clique no link abaixo:</p>
+                <p>
+                    <a href="https://www.google.com/url?q=https://suspicious-site.tk&source=gmail">
+                        Site suspeito via Google redirect
+                    </a>
+                </p>
+                <p>Gmail redirects through google.com/url - extension should extract real URL!</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>7. Complex Nested Structure</h2>
+        <div class="email-message">
+            <div class="email-header">
+                <strong>From:</strong> phishing@evil.com<br>
+                <strong>Subject:</strong> Urgent!!!
+            </div>
+            <div class="email-body">
+                <div style="padding: 10px; background: #fee; border: 2px solid #f00;">
+                    <table>
+                        <tr>
+                            <td>
+                                <a href="https://gooogle.com/signin">
+                                    <span style="color: blue; font-weight: bold;">
+                                        Click here NOW!
+                                    </span>
+                                </a>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <p>Deeply nested structure - common in HTML emails.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>✅ What Should Work</h2>
+        <ul>
+            <li>All <code>&lt;a href="..."&gt;</code> tags should be detected</li>
+            <li>Links wrapped in spans/divs should work</li>
+            <li>Button-style links should work</li>
+            <li>Nested structures should work (up to 5 levels)</li>
+            <li>Google redirects should be extracted (if code handles it)</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🐛 Debug</h2>
+        <p>Open console (F12) and look for:</p>
+        <ul>
+            <li><code>🛡️ PyPhish Sentinel Active</code> - Extension loaded</li>
+            <li><code>PyPhish: Detected link hover</code> - Link detection working</li>
+            <li><code>PyPhish: Extracted from Google redirect</code> - Google URL extraction</li>
+            <li><code>PyPhish: Showing tooltip</code> - Tooltip displayed</li>
+        </ul>
+        
+        <p><strong>Expected results:</strong></p>
+        <ul>
+            <li>paypa1.com → Medium risk (typosquatting)</li>
+            <li>amazon-tracking.tk → High risk (suspicious TLD)</li>
+            <li>micros0ft.com → Medium risk (typosquatting)</li>
+            <li>secure-nubank.tk → High risk (brand + suspicious TLD)</li>
+            <li>gooogle.com → Low-Medium risk (typosquatting)</li>
+        </ul>
+    </div>
+
+    <script>
+        // Test if extension is loaded
+        setTimeout(() => {
+            const hasTooltip = document.querySelector('.pyphish-tooltip');
+            if (hasTooltip) {
+                console.log('✅ Extension detected on page');
+            } else {
+                console.log('❌ Extension not detected - reload page or check if extension is active');
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

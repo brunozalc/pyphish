@@ -8,6 +8,8 @@ body {
   margin: 0;
   padding: 24px;
   background: #0f1012;
+  color: #e2e8f0;
+  color-scheme: dark;
 }
 
 main {
@@ -61,6 +63,11 @@ textarea, input[type="url"] {
   border: 1px solid rgba(148, 163, 184, 0.3);
   color: inherit;
   font-family: inherit;
+}
+
+textarea::placeholder,
+input[type="url"]::placeholder {
+  color: #64748b;
 }
 
 textarea:focus,

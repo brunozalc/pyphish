@@ -15,6 +15,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/test-malicious-code")
+def test_malicious_code():
+    return render_template("test_malicious_code.html")
+
+
 @app.route("/analyze", methods=["POST", "OPTIONS"])
 def analyze():
     if request.method == "OPTIONS":
@@ -69,9 +74,7 @@ def add_cors_headers(response):
     response.headers.setdefault(
         "Access-Control-Allow-Headers", "Content-Type, Authorization"
     )
-    response.headers.setdefault(
-        "Access-Control-Allow-Methods", "GET, POST, OPTIONS"
-    )
+    response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
     return response
 
 

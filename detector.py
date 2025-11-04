@@ -1,16 +1,8 @@
-import signal
 from typing import Dict
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from analyzer import URLAnalyzer
 from lists import PhishingListChecker
-
-
-class TimeoutError(Exception):
-    pass
-
-
-def timeout_handler(signum, frame):
-    raise TimeoutError("Operation timed out")
 
 
 class PhishingDetector:
@@ -47,13 +39,10 @@ class PhishingDetector:
 
         if check_lists:
             try:
-                # Set a timeout for list checking (5 seconds max)
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(5)
-
-                results["checks"]["phishing_lists"] = self._check_phishing_lists(url)
-
-                signal.alarm(0)  # Cancel the alarm
+                # Run list checks with a 5s timeout using a thread (signals don't work off main thread)
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(self._check_phishing_lists, url)
+                    results["checks"]["phishing_lists"] = future.result(timeout=5)
 
                 if results["checks"]["phishing_lists"].get("found_in_lists"):
                     results["is_phishing"] = True
@@ -62,8 +51,7 @@ class PhishingDetector:
                     results["summary"].append(
                         "URL encontrada em lista de phishing conhecida"
                     )
-            except TimeoutError:
-                signal.alarm(0)  # Cancel the alarm
+            except FuturesTimeoutError:
                 print("⚠️  List checking timed out, skipping...")
                 results["checks"]["phishing_lists"] = {
                     "custom_database": {"is_phishing": False, "message": "Timeout"},
@@ -72,7 +60,6 @@ class PhishingDetector:
                     "found_in_lists": False,
                 }
             except Exception as e:
-                signal.alarm(0)  # Cancel the alarm
                 print(f"⚠️  List checking error: {e}")
                 results["checks"]["phishing_lists"] = {
                     "custom_database": {"is_phishing": False, "message": str(e)},

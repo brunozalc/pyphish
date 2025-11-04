@@ -7,6 +7,8 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from code_analyzer import CodeAnalyzer
+
 
 class URLAnalyzer:
     """
@@ -106,6 +108,43 @@ class URLAnalyzer:
 
     USER_AGENT: str = "PyPhish/1.0 (+https://example.local)"
 
+    # Legitimate authentication/SSO domains that commonly have very long URLs
+    # These domains should not be penalized for URL length
+    LEGITIMATE_AUTH_DOMAINS: list[str] = [
+        "accounts.google.com",
+        "accounts.youtube.com",
+        "login.microsoftonline.com",
+        "login.live.com",
+        "login.windows.net",
+        "oauth.vk.com",
+        "api.twitter.com",
+        "oauth.twitter.com",
+        "www.facebook.com",
+        "m.facebook.com",
+        "appleid.apple.com",
+        "idmsa.apple.com",
+        "github.com",
+        "gitlab.com",
+        "bitbucket.org",
+        "id.atlassian.com",
+        "auth.atlassian.com",
+        "slack.com",
+        "discord.com",
+        "steamcommunity.com",
+        "store.steampowered.com",
+        "auth0.com",
+        "okta.com",
+        "onelogin.com",
+        "sso.godaddy.com",
+        "auth.gog.com",
+        "oauth.reddit.com",
+        "linkedin.com",
+        "api.linkedin.com",
+        "zoom.us",
+        "signin.aws.amazon.com",
+        "console.aws.amazon.com",
+    ]
+
     SCORE_WEIGHTS: dict[str, float] = {
         "low": 0.12,
         "medium": 0.22,
@@ -138,7 +177,8 @@ class URLAnalyzer:
         }
 
         if not domain:
-            self._add_signal(results, "URL inválida", severity="critical", weight=1.0)
+            self._add_signal(results, "URL inválida",
+                             severity="critical", weight=1.0)
             self._finalize_score(results)
             results["suspicious_features"] = list(
                 dict.fromkeys(results["suspicious_features"])
@@ -201,9 +241,11 @@ class URLAnalyzer:
         avoiding unbounded additive scores while keeping the summary readable.
         """
         if weight is None:
-            weight = self.SCORE_WEIGHTS.get(severity, self.SCORE_WEIGHTS["low"])
+            weight = self.SCORE_WEIGHTS.get(
+                severity, self.SCORE_WEIGHTS["low"])
 
-        breakdown = results.setdefault("details", {}).setdefault("score_breakdown", [])
+        breakdown = results.setdefault(
+            "details", {}).setdefault("score_breakdown", [])
         breakdown.append(
             {
                 "reason": description,
@@ -309,20 +351,39 @@ class URLAnalyzer:
 
     def _check_url_length(self, url: str, results: dict):
         L = len(url)
-        if L > 300:
+
+        # Check if this is a legitimate auth/SSO domain that commonly has long URLs
+        try:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+
+            # Skip length check for legitimate authentication domains
+            for auth_domain in self.LEGITIMATE_AUTH_DOMAINS:
+                if domain == auth_domain or domain.endswith("." + auth_domain):
+                    results["details"]["url_length"] = L
+                    results["details"]["auth_domain_exception"] = True
+                    return
+        except:
+            pass
+
+        # Only flag extremely long URLs (>500 chars) as high risk
+        # Many legitimate sites have long tracking/analytics URLs
+        if L > 500:
             self._add_signal(
                 results,
                 "URL extremamente longa",
-                severity="high",
-                weight=0.42,
+                severity="medium",
+                weight=0.22,
             )
             results["details"]["url_length"] = L
-        elif L > 200:
+        elif L > 300:
             self._add_signal(
                 results,
                 "URL muito longa",
-                severity="medium",
-                weight=0.26,
+                severity="low",
+                weight=0.12,
             )
             results["details"]["url_length"] = L
         elif L > 100:
@@ -402,19 +463,51 @@ class URLAnalyzer:
                 elif brand == "paypal":
                     official_domains.update({"paypal.com"})
                 elif brand == "google":
-                    official_domains.update({"google.com", "google.com.br"})
+                    official_domains.update(
+                        {
+                            "google.com",
+                            "google.com.br",
+                            "accounts.google.com",
+                            "accounts.youtube.com",
+                            "mail.google.com",
+                            "youtube.com",
+                            "gmail.com",
+                            "goo.gl",
+                            "youtu.be",
+                        }
+                    )
                 elif brand == "facebook":
                     official_domains.update({"facebook.com"})
                 elif brand == "microsoft":
-                    official_domains.update({"microsoft.com"})
+                    official_domains.update(
+                        {
+                            "microsoft.com",
+                            "microsoftonline.com",
+                            "login.microsoftonline.com",
+                            "login.live.com",
+                            "login.windows.net",
+                            "office.com",
+                            "office365.com",
+                            "live.com",
+                            "outlook.com",
+                            "outlook.live.com",
+                        }
+                    )
                 elif brand == "apple":
-                    official_domains.update({"apple.com"})
+                    official_domains.update(
+                        {
+                            "apple.com",
+                            "appleid.apple.com",
+                            "idmsa.apple.com",
+                            "icloud.com",
+                        }
+                    )
                 elif brand == "netflix":
                     official_domains.update({"netflix.com"})
                 elif brand == "instagram":
                     official_domains.update({"instagram.com"})
                 elif brand == "twitter":
-                    official_domains.update({"twitter.com", "x.com"})
+                    official_domains.update({"twitter.com", "x.com", "t.co"})
                 elif brand == "linkedin":
                     official_domains.update({"linkedin.com"})
                 elif brand == "itau":
@@ -422,7 +515,8 @@ class URLAnalyzer:
                 elif brand == "bradesco":
                     official_domains.update({"bradesco.com.br"})
                 elif brand == "santander":
-                    official_domains.update({"santander.com.br", "santander.com"})
+                    official_domains.update(
+                        {"santander.com.br", "santander.com"})
                 elif brand == "caixa":
                     official_domains.update({"caixa.gov.br"})
                 elif brand == "inter":
@@ -677,7 +771,8 @@ class URLAnalyzer:
             resp = self._raw_whois_query("whois.iana.org", tld)
             if not resp:
                 return None
-            m = re.search(r"^whois:\s*(.+)$", resp, re.MULTILINE | re.IGNORECASE)
+            m = re.search(r"^whois:\s*(.+)$", resp,
+                          re.MULTILINE | re.IGNORECASE)
             if m:
                 return m.group(1).strip()
             return None
@@ -820,6 +915,10 @@ class URLAnalyzer:
             or resp.text.startswith("<")
         ):
             self._analyze_html_content(resp, results)
+            # Analyze source code for malicious patterns and obfuscation
+            self._analyze_source_code(resp, results)
+            # Analyze for malicious SEO practices (keyword stuffing, cloaking, doorway pages)
+            self._analyze_malicious_seo(resp, results)
 
     def _analyze_html_content(self, resp: requests.Response, results: dict):
         html = resp.text[:500_000]  # hard cap
@@ -867,11 +966,25 @@ class URLAnalyzer:
 
         # Heuristics scoring
         if pwd_fields > 0:
+            details_snapshot = results.get("details", {})
+            domain_age = details_snapshot.get("whois_age_days")
+            suspicious_domain = bool(
+                details_snapshot.get("suspicious_tld")
+                or details_snapshot.get("dynamic_dns")
+                or details_snapshot.get("ip_address")
+            )
+
+            severity = "medium"
+            weight = 0.22
+            if suspicious_domain or (domain_age is not None and domain_age < 120):
+                severity = "high"
+                weight = 0.36
+
             self._add_signal(
                 results,
                 "Página com campo de senha",
-                severity="high",
-                weight=0.36,
+                severity=severity,
+                weight=weight,
             )
         if forms > 3:
             self._add_signal(
@@ -917,9 +1030,458 @@ class URLAnalyzer:
                 weight=0.25,
             )
 
+    def _analyze_source_code(self, resp: requests.Response, results: dict):
+        """
+        Analyze HTML/JavaScript source code for malicious scripts,
+        obfuscation techniques, and suspicious patterns.
+        """
+        html = resp.text[:500_000]  # hard cap
+
+        try:
+            code_analyzer = CodeAnalyzer()
+            code_results = code_analyzer.analyze(html)
+
+            # Store detailed code analysis results
+            results["details"]["code_analysis"] = {
+                "malicious_patterns_count": len(code_results["malicious_patterns"]),
+                "obfuscation_count": len(code_results["obfuscation_detected"]),
+                "exfiltration_risks_count": len(code_results["exfiltration_risks"]),
+                "credential_risks_count": len(code_results["credential_risks"]),
+                "suspicious_scripts_count": len(code_results["suspicious_scripts"]),
+                "entropy": code_results["entropy_analysis"],
+                "risk_level": code_results["risk_level"],
+                "summary": code_results["summary"],
+            }
+
+            # Add detailed findings for transparency
+            if code_results["malicious_patterns"]:
+                results["details"]["code_analysis"]["malicious_patterns"] = [
+                    {
+                        "type": p["type"],
+                        "description": p["description"],
+                        "severity": p["severity"],
+                        "count": p["count"],
+                    }
+                    # Limit to top 10
+                    for p in code_results["malicious_patterns"][:10]
+                ]
+
+            if code_results["obfuscation_detected"]:
+                results["details"]["code_analysis"]["obfuscation_techniques"] = [
+                    {
+                        "type": p["type"],
+                        "description": p["description"],
+                        "severity": p["severity"],
+                        "count": p["count"],
+                    }
+                    for p in code_results["obfuscation_detected"][:10]
+                ]
+
+            if code_results["suspicious_scripts"]:
+                results["details"]["code_analysis"]["suspicious_scripts"] = [
+                    {
+                        "script_id": s["script_id"],
+                        "findings_count": len(s["findings"]),
+                        "preview": s["preview"][:100],  # Shorter preview
+                    }
+                    for s in code_results["suspicious_scripts"][
+                        :5
+                    ]  # Limit to 5 scripts
+                ]
+
+            # Add signals based on code analysis findings
+            # Critical findings
+            critical_patterns = [
+                p
+                for p in code_results["malicious_patterns"]
+                if p["severity"] == "critical"
+            ]
+            if critical_patterns:
+                self._add_signal(
+                    results,
+                    f"Código malicioso crítico detectado ({len(critical_patterns)} padrões)",
+                    severity="critical",
+                    weight=0.5,
+                )
+
+            # High severity obfuscation
+            high_obfuscation = [
+                p
+                for p in code_results["obfuscation_detected"]
+                if p["severity"] in ["critical", "high"]
+            ]
+            if high_obfuscation:
+                self._add_signal(
+                    results,
+                    f"Ofuscação de código detectada ({len(high_obfuscation)} técnicas)",
+                    severity="high",
+                    weight=0.35,
+                )
+
+            # Credential harvesting patterns
+            if code_results["credential_risks"]:
+                high_cred_risks = [
+                    p
+                    for p in code_results["credential_risks"]
+                    if p["severity"] in ["high", "critical"]
+                ]
+                suspicious_context = self._has_suspicious_credential_context(
+                    results)
+
+                if high_cred_risks and suspicious_context:
+                    self._add_signal(
+                        results,
+                        "Padrões de captura de credenciais detectados",
+                        severity="high",
+                        weight=0.38,
+                    )
+                elif len(high_cred_risks) > 1:
+                    self._add_signal(
+                        results,
+                        "Múltiplos padrões de captura de credenciais detectados",
+                        severity="medium",
+                        weight=0.24,
+                    )
+                else:
+                    medium_cred_risks = [
+                        p
+                        for p in code_results["credential_risks"]
+                        if p["severity"] == "medium"
+                    ]
+                    if len(medium_cred_risks) >= 2 and suspicious_context:
+                        self._add_signal(
+                            results,
+                            "Padrões de captura de credenciais detectados",
+                            severity="medium",
+                            weight=0.22,
+                        )
+
+            # High entropy (obfuscation indicator)
+            if code_results["entropy_analysis"].get("is_suspicious"):
+                max_entropy = code_results["entropy_analysis"].get(
+                    "max_entropy", 0)
+                if max_entropy >= 6.2:
+                    self._add_signal(
+                        results,
+                        f"Alta entropia no código (entropia={max_entropy:.2f}) - possível ofuscação",
+                        severity="high",
+                        weight=0.32,
+                    )
+                elif max_entropy >= 5.6:
+                    self._add_signal(
+                        results,
+                        f"Entropia elevada no código (entropia={max_entropy:.2f})",
+                        severity="medium",
+                        weight=0.18,
+                    )
+
+            # Multiple suspicious scripts
+            if len(code_results["suspicious_scripts"]) >= 3:
+                self._add_signal(
+                    results,
+                    f"Múltiplos scripts suspeitos ({len(code_results['suspicious_scripts'])})",
+                    severity="medium",
+                    weight=0.22,
+                )
+
+            # Data exfiltration risks
+            high_exfil = []
+            for p in code_results["exfiltration_risks"]:
+                severity = p.get("severity")
+                count = p.get("count", 0)
+                if severity == "high" and count >= 2:
+                    high_exfil.append(p)
+                elif severity == "medium" and count >= 5:
+                    high_exfil.append(p)
+            if high_exfil:
+                self._add_signal(
+                    results,
+                    "Múltiplas tentativas de exfiltração de dados detectadas",
+                    severity="medium",
+                    weight=0.25,
+                )
+
+        except Exception as e:
+            # Don't fail the entire analysis if code analysis fails
+            results["details"]["code_analysis"] = {
+                "error": f"Erro na análise de código: {str(e)}"
+            }
+
+    def _analyze_malicious_seo(self, resp: requests.Response, results: dict) -> None:
+        """
+        Detect malicious SEO practices:
+        - Keyword stuffing (excessive repetition of terms, hidden text blocks)
+        - Cloaking (different content for bots vs users)
+        - Doorway pages (link farms, meta-refresh with thin content)
+        """
+        try:
+            html = resp.text[:500_000]
+            lowered = html.lower()
+
+            seo_details = results.setdefault(
+                "details", {}).setdefault("seo_analysis", {})
+
+            # -----------------------
+            # Keyword stuffing
+            # -----------------------
+            # Remove scripts/styles/comments for visible text approximation
+            cleaned = re.sub(r"<script[\s\S]*?</script>",
+                             " ", lowered, flags=re.IGNORECASE)
+            cleaned = re.sub(r"<style[\s\S]*?</style>",
+                             " ", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"<!--([\s\S]*?)-->", " ", cleaned)
+            # Strip tags
+            visible_text = re.sub(r"<[^>]+>", " ", cleaned)
+
+            # Tokenize words (support accents)
+            tokens = re.findall(r"[a-zA-ZÀ-ÖØ-öø-ÿ]{2,}", visible_text)
+            total_words = len(tokens)
+            stopwords = {
+                # PT & EN minimal list
+                "a", "o", "os", "as", "de", "da", "do", "das", "dos", "e", "é", "em", "para", "por", "um", "uma", "ou", "que", "com", "na", "no", "nas", "nos", "se", "não", "sim", "the", "and", "of", "to", "in", "for", "on", "is", "it", "with", "as", "by", "at", "from", "this", "that", "or", "an", "be", "are", "was", "were"
+            }
+            tokens_wo_sw = [t for t in tokens if t not in stopwords]
+            total_wo_sw = len(tokens_wo_sw)
+
+            top_terms = []
+            top_ratio = 0.0
+            unique_ratio = 1.0
+            repeated_runs = 0
+            if total_wo_sw >= 50:
+                freq = {}
+                for t in tokens_wo_sw:
+                    freq[t] = freq.get(t, 0) + 1
+                # Top 5 terms
+                top_terms = sorted(
+                    freq.items(), key=lambda kv: kv[1], reverse=True)[:5]
+                top_count = top_terms[0][1] if top_terms else 0
+                top_ratio = (top_count / total_wo_sw) if total_wo_sw else 0.0
+                unique_ratio = (
+                    len(freq) / total_wo_sw) if total_wo_sw else 1.0
+                # Repeated word runs like "comprar comprar comprar"
+                repeated_runs = len(re.findall(
+                    r"\b([a-zA-ZÀ-ÖØ-öø-ÿ]+)(?:\s+\1){2,}\b", visible_text, re.IGNORECASE))
+
+            # meta keywords overflow
+            meta_kw_matches = re.findall(
+                r"<meta[^>]+name=[\"']keywords[\"'][^>]+content=[\"']([^\"']+)[\"'][^>]*>", lowered)
+            meta_kw_len = 0
+            if meta_kw_matches:
+                meta_kw_len = sum(s.count(",") + 1 for s in meta_kw_matches)
+
+            # Hidden text blocks with long content
+            hidden_blocks = re.findall(
+                r"<([a-z0-9]+)[^>]*style=[\"'][^\"']*(display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0|font-size\s*:\s*0)[^\"']*[\"'][^>]*>([\s\S]*?)</\1>", html, re.IGNORECASE)
+            long_hidden_count = 0
+            for _, _, inner in hidden_blocks[:50]:  # cap
+                # Count words inside hidden blocks
+                inner_tokens = re.findall(r"[a-zA-ZÀ-ÖØ-öø-ÿ]{2,}", inner)
+                if len(inner_tokens) >= 30:
+                    long_hidden_count += 1
+
+            stuffing_signals = 0
+            if total_wo_sw >= 100 and top_ratio >= 0.07 and (top_terms and top_terms[0][1] >= 50):
+                stuffing_signals += 1
+            if total_wo_sw >= 150 and sum(c for _, c in top_terms[:3]) / total_wo_sw >= 0.18:
+                stuffing_signals += 1
+            if unique_ratio <= 0.2:
+                stuffing_signals += 1
+            if repeated_runs >= 2:
+                stuffing_signals += 1
+            if meta_kw_len >= 20:
+                stuffing_signals += 1
+            if long_hidden_count >= 2:
+                stuffing_signals += 1
+
+            if stuffing_signals >= 2:
+                severity = "medium"
+                weight = 0.22
+                if stuffing_signals >= 4:
+                    severity = "high"
+                    weight = 0.35
+                self._add_signal(
+                    results,
+                    "Possível keyword stuffing (SEO malicioso)",
+                    severity=severity,
+                    weight=weight,
+                )
+                seo_details["keyword_stuffing"] = {
+                    "total_words_no_stopwords": total_wo_sw,
+                    "top_terms": top_terms,
+                    "top_ratio": round(top_ratio, 3),
+                    "unique_ratio": round(unique_ratio, 3),
+                    "repeated_runs": repeated_runs,
+                    "meta_keywords_count": meta_kw_len,
+                    "hidden_blocks_long": long_hidden_count,
+                }
+
+            # -----------------------
+            # Doorway pages
+            # -----------------------
+            anchors = re.findall(
+                r"<a\s[^>]*href\s*=\s*[\"']([^\"']+)[\"']", lowered)
+            anchor_count = len(anchors)
+            # Estimate word count (visible)
+            word_count = total_words
+
+            external_count = 0
+            same_count = 0
+            try:
+                page_domain = self._extract_domain(urlparse(resp.url)).lower()
+                page_sld = self._get_sld(page_domain) if page_domain else ""
+                for href in anchors[:1000]:  # cap
+                    try:
+                        abs_url = urljoin(resp.url, href)
+                        ad = self._extract_domain(urlparse(abs_url)).lower()
+                        if not ad:
+                            continue
+                        if page_sld and self._get_sld(ad) != page_sld:
+                            external_count += 1
+                        else:
+                            same_count += 1
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            external_ratio = (
+                external_count / anchor_count) if anchor_count else 0.0
+
+            # Meta refresh fast redirects
+            meta_refresh = re.findall(
+                r"<meta[^>]+http-equiv=[\"']refresh[\"'][^>]+content=[\"']\s*(\d+)\s*;\s*url=", lowered)
+            fast_refresh = [int(s)
+                            for s in meta_refresh if s.isdigit() and int(s) <= 3]
+
+            doorway_signals = 0
+            if anchor_count >= 100 and word_count < 300 and external_ratio >= 0.7:
+                doorway_signals += 1
+            if fast_refresh:
+                doorway_signals += 1
+
+            if doorway_signals >= 1:
+                self._add_signal(
+                    results,
+                    "Padrões de doorway page (SEO malicioso)",
+                    severity="medium",
+                    weight=0.22,
+                )
+                seo_details["doorway_page"] = {
+                    "anchors": anchor_count,
+                    "external_links": external_count,
+                    "internal_links": same_count,
+                    "external_ratio": round(external_ratio, 2),
+                    "word_count": word_count,
+                    "fast_meta_refresh": len(fast_refresh),
+                }
+
+            # -----------------------
+            # Cloaking (bot vs user content)
+            # -----------------------
+            try:
+                bot_headers = {
+                    "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}
+                bot_resp = requests.get(
+                    resp.url,
+                    headers=bot_headers,
+                    timeout=1,
+                    allow_redirects=True,
+                )
+                bot_html = bot_resp.text[:200_000].lower()
+
+                # Normalize: strip tags/scripts/styles/comments
+                def _norm(txt: str) -> str:
+                    t = re.sub(r"<script[\s\S]*?</script>",
+                               " ", txt, flags=re.IGNORECASE)
+                    t = re.sub(r"<style[\s\S]*?</style>",
+                               " ", t, flags=re.IGNORECASE)
+                    t = re.sub(r"<!--([\s\S]*?)-->", " ", t)
+                    t = re.sub(r"<[^>]+>", " ", t)
+                    t = re.sub(r"\s+", " ", t)
+                    return t.strip()
+
+                user_norm = _norm(lowered)
+                bot_norm = _norm(bot_html)
+
+                # Token sets for Jaccard similarity (top 200 tokens)
+                def _top_tokens(txt: str):
+                    toks = re.findall(r"[a-zA-ZÀ-ÖØ-öø-ÿ]{3,}", txt)
+                    counts = {}
+                    for t in toks:
+                        counts[t] = counts.get(t, 0) + 1
+                    items = sorted(
+                        counts.items(), key=lambda kv: kv[1], reverse=True)[:200]
+                    return {w for w, _ in items}
+
+                set_user = _top_tokens(user_norm)
+                set_bot = _top_tokens(bot_norm)
+                union = len(set_user | set_bot)
+                inter = len(set_user & set_bot)
+                jaccard = (inter / union) if union else 1.0
+
+                len_u = max(1, len(user_norm))
+                len_b = max(1, len(bot_norm))
+                len_diff = abs(len_u - len_b) / max(len_u, len_b)
+
+                # Compare final redirect targets as well
+                try:
+                    orig_domain = self._get_sld(
+                        self._extract_domain(urlparse(resp.url)).lower())
+                    bot_domain = self._get_sld(
+                        self._extract_domain(urlparse(bot_resp.url)).lower())
+                except Exception:
+                    orig_domain = bot_domain = ""
+
+                different_redirect = bool(
+                    orig_domain and bot_domain and orig_domain != bot_domain)
+
+                if (jaccard < 0.35 and len_diff > 0.4) or different_redirect:
+                    self._add_signal(
+                        results,
+                        "Possível cloaking (conteúdo para bot difere do usuário)",
+                        severity="high",
+                        weight=0.34,
+                    )
+                    seo_details["cloaking"] = {
+                        "jaccard": round(jaccard, 2),
+                        "length_diff": round(len_diff, 2),
+                        "user_final_url": resp.url,
+                        "bot_final_url": bot_resp.url,
+                        "different_redirect_domain": different_redirect,
+                    }
+            except Exception:
+                # Ignore cloaking check failures silently
+                pass
+
+        except Exception as e:
+            results.setdefault("details", {}).setdefault(
+                "seo_analysis", {})["error"] = str(e)
+
     # ---------------------------
     # Utilities
     # ---------------------------
+    def _has_suspicious_credential_context(self, results: dict) -> bool:
+        details = results.get("details", {})
+        content_details = details.get("content_analysis", {})
+
+        domain_age = details.get("whois_age_days")
+        has_external_form = bool(content_details.get("external_form_actions"))
+
+        suspicious_domain = bool(
+            details.get("suspicious_tld")
+            or details.get("dynamic_dns")
+            or details.get("ip_address")
+        )
+
+        existing_high = any(
+            comp.get("severity") in {"high", "critical"}
+            for comp in details.get("score_breakdown", [])
+        )
+
+        is_new_domain = domain_age is not None and domain_age < 120
+
+        return has_external_form or suspicious_domain or existing_high or is_new_domain
+
     def _extract_domain(self, parsed: urlparse) -> str:
         host = parsed.netloc or ""
         host = host.strip().lower()
