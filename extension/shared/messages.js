@@ -5,7 +5,9 @@ self.PYPHISH_MESSAGES = {
     ANALYSIS_RESULT: "pyphish.analysis_result",
     SETTINGS_UPDATED: "pyphish.settings_updated",
     FETCH_SETTINGS: "pyphish.fetch_settings",
-    RESULT_BY_URL: "pyphish.result_by_url"
+    RESULT_BY_URL: "pyphish.result_by_url",
+    BEHAVIOR_ANALYSIS_RESULT: "pyphish.behavior_analysis_result",
+    REQUEST_BEHAVIOR_ANALYSIS: "pyphish.request_behavior_analysis"
   },
   RISK_LEVELS: {
     HIGH: "ALTO",

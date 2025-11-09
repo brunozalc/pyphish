@@ -108,6 +108,32 @@ class URLAnalyzer:
 
     USER_AGENT: str = "PyPhish/1.0 (+https://example.local)"
 
+    # Common URL shortener domains (non-exhaustive)
+    SHORTENER_DOMAINS: list[str] = [
+        "bit.ly",
+        "t.co",
+        "goo.gl",
+        "tinyurl.com",
+        "ow.ly",
+        "buff.ly",
+        "is.gd",
+        "s.id",
+        "lnkd.in",
+        "rebrand.ly",
+        "rb.gy",
+        "cutt.ly",
+        "shorturl.at",
+        "adf.ly",
+        "t.ly",
+        "v.gd",
+        "shorte.st",
+        "trib.al",
+        "clck.ru",
+        "dlvr.it",
+        "t2m.io",
+        "youtu.be",
+    ]
+
     # Legitimate authentication/SSO domains that commonly have very long URLs
     # These domains should not be penalized for URL length
     LEGITIMATE_AUTH_DOMAINS: list[str] = [
@@ -143,6 +169,13 @@ class URLAnalyzer:
         "zoom.us",
         "signin.aws.amazon.com",
         "console.aws.amazon.com",
+    ]
+
+    # Public domain blacklists for email spam/URL reputation (best-effort)
+    EMAIL_BLACKLIST_ZONES: list[dict[str, str]] = [
+        {"name": "Spamhaus DBL", "zone": "dbl.spamhaus.org"},
+        {"name": "SURBL", "zone": "multi.surbl.org"},
+        {"name": "URIBL", "zone": "multi.uribl.com"},
     ]
 
     SCORE_WEIGHTS: dict[str, float] = {
@@ -185,6 +218,42 @@ class URLAnalyzer:
             )
             return results
 
+        # Expand shortened URLs before running heuristics
+        try:
+            if domain and self._is_shortener_domain(domain):
+                results.setdefault("details", {})["original_url"] = url
+                expanded_url, pre_chain = self._expand_shortened_url(url)
+                if expanded_url and expanded_url != url:
+                    results["details"]["expanded_url"] = expanded_url
+                    if pre_chain:
+                        results["details"]["preexpand_redirect_chain"] = pre_chain
+                    # Replace target for subsequent analysis
+                    url = expanded_url
+                    parsed = urlparse(url)
+                    domain = self._extract_domain(parsed)
+                    results["url"] = url
+                    results["domain"] = domain or ""
+                    # Using a URL shortener is a mild risk indicator
+                    try:
+                        final_domain = self._extract_domain(
+                            urlparse(expanded_url))
+                        self._add_signal(
+                            results,
+                            f"URL encurtada usada (expandida para {final_domain})",
+                            severity="low",
+                            weight=0.12,
+                        )
+                    except Exception:
+                        self._add_signal(
+                            results,
+                            "URL encurtada usada",
+                            severity="low",
+                            weight=0.12,
+                        )
+        except Exception as e:
+            results.setdefault("details", {})[
+                "shortener_expand_error"] = str(e)
+
         # heuristic checks
         self._check_number_substitution(domain, results)
         self._check_excessive_subdomains(domain, results)
@@ -208,6 +277,12 @@ class URLAnalyzer:
             self._check_whois_age(domain, results)
         except Exception as e:
             results["details"]["whois_error"] = str(e)
+
+        # Email/URI blacklists (DNSBL/DBL) - best-effort, short timeout
+        try:
+            self._check_email_blacklists(domain, results)
+        except Exception as e:
+            results.setdefault("details", {})["dnsbl_error"] = str(e)
 
         # redirects + basic content scan (with timeout protection)
         try:
@@ -1293,12 +1368,30 @@ class URLAnalyzer:
             if long_hidden_count >= 2:
                 stuffing_signals += 1
 
-            if stuffing_signals >= 2:
+            # Calibrated gating to reduce false positives on news/content sites
+            # Consider overall context: suspicious domain signals, young domain, hidden content or meta overflow
+            details_snapshot = results.get("details", {})
+            domain_age = details_snapshot.get("whois_age_days")
+            is_new_domain = domain_age is not None and domain_age < 120
+            suspicious_domain = bool(
+                details_snapshot.get("suspicious_tld")
+                or details_snapshot.get("dynamic_dns")
+                or details_snapshot.get("ip_address")
+            )
+            aggressive_context = (
+                suspicious_domain or is_new_domain or long_hidden_count >= 1 or meta_kw_len >= 30
+            )
+
+            should_flag_stuffing = stuffing_signals >= 3 or (
+                aggressive_context and stuffing_signals >= 2
+            )
+
+            if should_flag_stuffing:
                 severity = "medium"
-                weight = 0.22
-                if stuffing_signals >= 4:
+                weight = 0.18
+                if stuffing_signals >= 5:
                     severity = "high"
-                    weight = 0.35
+                    weight = 0.32
                 self._add_signal(
                     results,
                     "Possível keyword stuffing (SEO malicioso)",
@@ -1460,6 +1553,161 @@ class URLAnalyzer:
     # ---------------------------
     # Utilities
     # ---------------------------
+    def _check_email_blacklists(self, domain: str, results: dict) -> None:
+        sld = self._get_sld(domain).lower() if domain else ""
+        if not sld or "." not in sld:
+            return
+
+        listed_in: list[str] = []
+        details = results.setdefault("details", {})
+        bl_summary: dict[str, Any] = {}
+
+        # Temporarily lower global socket timeout for DNS queries
+        prev_timeout = socket.getdefaulttimeout()
+        try:
+            socket.setdefaulttimeout(1)
+            for entry in self.EMAIL_BLACKLIST_ZONES:
+                name = entry.get("name")
+                zone = entry.get("zone")
+                if not zone:
+                    continue
+                query = f"{sld}.{zone}"
+                try:
+                    addrs = []
+                    try:
+                        infos = socket.getaddrinfo(query, 80)
+                        addrs = [i[4][0] for i in infos if i and i[4]]
+                    except Exception as e:
+                        # Fallback to simple resolver
+                        try:
+                            addrs = [socket.gethostbyname(query)]
+                        except Exception:
+                            addrs = []
+
+                    # Interpret only recognized positive codes for each provider
+                    def _is_positive(zone_name: str, addr: str) -> bool:
+                        if not addr.startswith("127."):
+                            return False
+                        try:
+                            parts = [int(p) for p in addr.split(".")]
+                        except Exception:
+                            return False
+                        # Normalize
+                        a, b, c, d = (parts + [0, 0, 0, 0])[:4]
+                        # 127.0.0.1 is commonly used to signal "refused/blocked" by some providers
+                        if (a, b, c, d) == (127, 0, 0, 1):
+                            return False
+                        zn = (zone_name or "").lower()
+                        # Spamhaus DBL positive codes are 127.0.1.x (e.g., 2,4,5,6,102,103)
+                        if "spamhaus" in zn or "dbl.spamhaus.org" in zn:
+                            return a == 127 and b == 0 and c == 1 and d in {2, 4, 5, 6, 102, 103}
+                        # SURBL multi returns 127.0.0.X with X as a bitmask; treat any X not 0/1 as positive
+                        if "surbl" in zn:
+                            return a == 127 and b == 0 and c == 0 and d not in {0, 1}
+                        # URIBL multi returns 127.0.0.{2,4,8,...}; treat X not 0/1 as positive
+                        if "uribl" in zn:
+                            return a == 127 and b == 0 and c == 0 and d not in {0, 1}
+                        # Default: require 127.0.0.d with d>1
+                        return a == 127 and b == 0 and c == 0 and d > 1
+
+                    is_listed = any(_is_positive(name or zone, a)
+                                    for a in addrs)
+                    bl_summary[name or zone] = {
+                        "query": query,
+                        "listed": bool(is_listed),
+                        "addresses": addrs,
+                    }
+                    if is_listed:
+                        listed_in.append(name or zone)
+                except Exception:
+                    bl_summary[name or zone] = {
+                        "query": query,
+                        "listed": False,
+                        "error": "lookup_failed",
+                    }
+        finally:
+            socket.setdefaulttimeout(prev_timeout)
+
+        if bl_summary:
+            details["email_blacklists"] = bl_summary
+
+        if listed_in:
+            details_snapshot = results.get("details", {})
+            domain_age = details_snapshot.get("whois_age_days")
+            suspicious_domain = bool(
+                details_snapshot.get("suspicious_tld")
+                or details_snapshot.get("dynamic_dns")
+                or details_snapshot.get("ip_address")
+            )
+
+            results["details"]["email_blacklists_listed"] = listed_in
+
+            # Calibrated severity: trust Spamhaus more, and multiple lists
+            listed_lower = [s.lower() for s in listed_in]
+            has_spamhaus = any(
+                "spamhaus" in s or "dbl.spamhaus.org" in s for s in listed_lower)
+            multi_sources = len(listed_in) >= 2
+            is_new_domain = domain_age is not None and domain_age < 120
+
+            if has_spamhaus or multi_sources or suspicious_domain or is_new_domain:
+                self._add_signal(
+                    results,
+                    "Domínio presente em listas negras de e-mail",
+                    severity="high",
+                    weight=0.34,
+                )
+            else:
+                # Long-standing domains with a single non-Spamhaus hit: low signal, not in summary
+                self._add_signal(
+                    results,
+                    "Domínio referenciado em lista de e-mail (sinal fraco)",
+                    severity="low",
+                    weight=0.1,
+                    include_summary=False,
+                )
+
+    def _is_shortener_domain(self, domain: str) -> bool:
+        host = (domain or "").lower().split(":")[0]
+        for short in self.SHORTENER_DOMAINS:
+            if host == short or host.endswith("." + short):
+                return True
+        return False
+
+    def _expand_shortened_url(self, url: str) -> tuple[str, list[str]]:
+        """
+        Best-effort expansion for shortened URLs using HEAD first, then GET fallback.
+        Returns (final_url, redirect_chain). If expansion fails, returns (url, []).
+        """
+        headers = {"User-Agent": self.USER_AGENT}
+        try:
+            resp = requests.head(
+                url,
+                headers=headers,
+                timeout=1,
+                allow_redirects=True,
+            )
+            chain = [r.url for r in resp.history] + [resp.url]
+            return resp.url or url, chain
+        except Exception:
+            # Some shorteners don't support HEAD; fallback to GET without reading body fully
+            try:
+                resp = requests.get(
+                    url,
+                    headers=headers,
+                    timeout=1,
+                    allow_redirects=True,
+                    stream=True,
+                )
+                chain = [r.url for r in resp.history] + [resp.url]
+                # Close immediately to avoid downloading content
+                try:
+                    resp.close()
+                except Exception:
+                    pass
+                return resp.url or url, chain
+            except Exception:
+                return url, []
+
     def _has_suspicious_credential_context(self, results: dict) -> bool:
         details = results.get("details", {})
         content_details = details.get("content_analysis", {})

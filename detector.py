@@ -70,6 +70,12 @@ class PhishingDetector:
 
         url_analysis = self.url_analyzer.analyze(url)
         results["checks"]["url_analysis"] = url_analysis
+        # Bubble up key analysis fields for extension/UI convenience
+        try:
+            results["url"] = url_analysis.get("url", results.get("url", url))
+            results["details"] = url_analysis.get("details", {})
+        except Exception:
+            pass
 
         if not results["is_phishing"]:
             results["risk_score"] = min(url_analysis["risk_score"], 100)

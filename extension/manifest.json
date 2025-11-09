@@ -38,9 +38,9 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["shared/messages.js", "content/detector.js"],
+      "js": ["shared/messages.js", "content/behavior.js", "content/detector.js"],
       "css": ["content/overlay.css"],
-      "run_at": "document_start"
+      "run_at": "document_end"
     }
   ],
   "browser_action": {

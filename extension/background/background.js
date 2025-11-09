@@ -5,6 +5,7 @@ const { BADGE_COLORS, CACHE_TTL_MS, RISK_THRESHOLDS } = PYPHISH_CONSTANTS;
 const { MSG_TYPES, isDangerous, scoreForSensitivity } = PYPHISH_MESSAGES;
 
 const tabResults = new Map();
+const behaviorResults = new Map();
 
 async function evaluateUrl(url, settings) {
   const cached = PYPHISH_STATE.getCachedResult(url);
@@ -115,6 +116,55 @@ browser.webRequest.onBeforeRequest.addListener(
 browser.runtime.onMessage.addListener((message, sender) => {
   const { type, payload } = message || {};
   switch (type) {
+    case MSG_TYPES.BEHAVIOR_ANALYSIS_RESULT:
+      return (async () => {
+        const url = payload && payload.url;
+        const results = payload && payload.results;
+        if (url && results) {
+          behaviorResults.set(url, results);
+          console.log("PyPhish: Stored behavior results for", url, results);
+
+          // Merge behavior findings into existing tab result if available
+          const tabId = sender && sender.tab && sender.tab.id;
+          if (tabId && tabResults.has(tabId)) {
+            const existingResult = tabResults.get(tabId);
+            const behaviorScore = results.riskScore || 0;
+            const combinedScore = Math.min(
+              100,
+              existingResult.risk_score + Math.round(behaviorScore * 0.5)
+            );
+
+            existingResult.behavior_analysis = results;
+            existingResult.risk_score = combinedScore;
+            existingResult.risk_level = await PYPHISH_STATE.then(() => {
+              if (combinedScore >= 70) return "ALTO";
+              if (combinedScore >= 40) return "MÉDIO";
+              return "BAIXO";
+            });
+
+            // Add behavior findings to summary
+            if (results.findings && results.findings.length > 0) {
+              const behaviorSummary = results.findings
+                .filter((f) => f.severity === "high" || f.severity === "critical")
+                .map((f) => f.description)
+                .slice(0, 3);
+              existingResult.summary = [
+                ...existingResult.summary,
+                ...behaviorSummary,
+              ];
+            }
+
+            const settings = await PYPHISH_STATE.getSettings();
+            const threshold = scoreForSensitivity(
+              settings.sensitivity,
+              RISK_THRESHOLDS
+            );
+            await updateBadge(tabId, existingResult, threshold);
+            tabResults.set(tabId, existingResult);
+          }
+        }
+        return Promise.resolve({ received: true });
+      })();
     case MSG_TYPES.ANALYZE_LINK:
       return (async () => {
         const settings = await PYPHISH_STATE.getSettings();
