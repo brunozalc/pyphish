@@ -171,6 +171,19 @@ class URLAnalyzer:
         "console.aws.amazon.com",
     ]
 
+    TRUSTED_CONTENT_DOMAINS: set[str] = {
+        "cnn.com",
+        "cnnbrasil.com.br",
+        "folha.uol.com.br",
+        "uol.com.br",
+        "globo.com",
+        "g1.globo.com",
+        "ge.globo.com",
+        "nytimes.com",
+        "bbc.com",
+        "theguardian.com",
+    }
+
     # Public domain blacklists for email spam/URL reputation (best-effort)
     EMAIL_BLACKLIST_ZONES: list[dict[str, str]] = [
         {"name": "Spamhaus DBL", "zone": "dbl.spamhaus.org"},
@@ -342,10 +355,18 @@ class URLAnalyzer:
         results["risk_score"] = int(round(aggregated * 100))
 
     def _check_number_substitution(self, domain: str, results: dict):
+        host = (domain or "").split(":")[0].lower().strip()
+        if not host:
+            return
+
+        sld = self._get_sld(host)
+        sld_label = sld.split(".")[0] if "." in sld else sld
+        normalized = re.sub(r"[^a-z0-9]", "", sld_label)
+
         occurrences: List[str] = []
         for letter, number in self.LETTER_NUMBER_SUBSTITUTIONS.items():
-            if number in domain:
-                # Attempt to pair number back to similar letters in the domain pattern context
+            pattern = re.compile(rf"[a-z]{re.escape(number)}[a-z]")
+            if pattern.search(normalized):
                 occurrences.append(f"'{number}' pode substituir '{letter}'")
 
         if occurrences:
@@ -358,29 +379,60 @@ class URLAnalyzer:
             results["details"]["number_substitution"] = occurrences
 
     def _check_excessive_subdomains(self, domain: str, results: dict):
-        parts = domain.split(".")
-        if parts and ":" in parts[-1]:
-            parts[-1] = parts[-1].split(":")[0]
+        host = (domain or "").split(":")[0].lower().strip()
+        if not host:
+            return
 
-        subdomain_count = max(0, len(parts) - 2)
-        if subdomain_count > 2:
+        parts = [p for p in host.split(".") if p]
+        if len(parts) <= 2:
+            return
+
+        sld = self._get_sld(host)
+        sld_parts = [p for p in sld.split(".") if p]
+        base_len = len(sld_parts)
+        if base_len >= len(parts):
+            return
+
+        sub_parts = parts[: len(parts) - base_len]
+
+        def _is_benign_prefix(label: str) -> bool:
+            if re.fullmatch(r"www\d*", label):
+                return True
+            if re.fullmatch(r"m\d*", label):
+                return True
+            return label in {"www", "m", "mobile", "amp"}
+
+        trimmed_parts = list(sub_parts)
+        while trimmed_parts and _is_benign_prefix(trimmed_parts[0]):
+            trimmed_parts.pop(0)
+
+        subdomain_count = len(trimmed_parts)
+        total_subdomains = len(sub_parts)
+
+        if subdomain_count >= 4:
             self._add_signal(
                 results,
                 "Uso excessivo de subdomínios",
                 severity="high",
                 weight=0.32,
             )
-            results["details"]["subdomain_count"] = subdomain_count
-            results["details"]["subdomains"] = ".".join(parts[:-2])
-        elif subdomain_count > 1:
-            results["details"]["subdomain_count"] = subdomain_count
+        elif subdomain_count >= 2:
             self._add_signal(
                 results,
-                "Domínio com múltiplos subdomínios incomuns",
+                "Uso incomum de múltiplos subdomínios",
                 severity="medium",
-                weight=0.14,
-                include_summary=False,
+                weight=0.18,
             )
+        elif subdomain_count == 1:
+            # Record context but avoid increasing score; helps with debugging
+            results["details"]["subdomain_count"] = total_subdomains
+            results["details"]["subdomains"] = ".".join(sub_parts)
+            return
+        else:
+            return
+
+        results["details"]["subdomain_count"] = total_subdomains
+        results["details"]["subdomains"] = ".".join(sub_parts)
 
     def _check_special_characters(self, domain: str, results: dict):
         special_chars = ["-", "_"]
@@ -1472,6 +1524,14 @@ class URLAnalyzer:
             # Cloaking (bot vs user content)
             # -----------------------
             try:
+                try:
+                    page_sld = self._get_sld(
+                        self._extract_domain(urlparse(resp.url)).lower()
+                    )
+                except Exception:
+                    page_sld = ""
+                is_trusted_domain = page_sld in self.TRUSTED_CONTENT_DOMAINS
+
                 bot_headers = {
                     "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}
                 bot_resp = requests.get(
@@ -1528,20 +1588,28 @@ class URLAnalyzer:
                 different_redirect = bool(
                     orig_domain and bot_domain and orig_domain != bot_domain)
 
-                if (jaccard < 0.35 and len_diff > 0.4) or different_redirect:
+                cloaking_trigger = False
+                if (jaccard < 0.35 and len_diff > 0.4) and not is_trusted_domain:
+                    cloaking_trigger = True
+                if different_redirect and not is_trusted_domain:
+                    cloaking_trigger = True
+
+                seo_details["cloaking"] = {
+                    "jaccard": round(jaccard, 2),
+                    "length_diff": round(len_diff, 2),
+                    "user_final_url": resp.url,
+                    "bot_final_url": bot_resp.url,
+                    "different_redirect_domain": different_redirect,
+                    "trusted_domain": is_trusted_domain,
+                }
+
+                if cloaking_trigger:
                     self._add_signal(
                         results,
                         "Possível cloaking (conteúdo para bot difere do usuário)",
                         severity="high",
                         weight=0.34,
                     )
-                    seo_details["cloaking"] = {
-                        "jaccard": round(jaccard, 2),
-                        "length_diff": round(len_diff, 2),
-                        "user_final_url": resp.url,
-                        "bot_final_url": bot_resp.url,
-                        "different_redirect_domain": different_redirect,
-                    }
             except Exception:
                 # Ignore cloaking check failures silently
                 pass
