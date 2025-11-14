@@ -52,7 +52,10 @@ python main.py
 
 ## Vídeo de demonstração
 
-<img src="assets/demo.mp4" alt="Demonstração da extensão" width="400px" />
+<video src="assets/demo.mp4" controls width="640">
+  <!-- fallback text -->
+  your browser does not support the video tag.
+</video>
 
 ## Capturas de tela
 
