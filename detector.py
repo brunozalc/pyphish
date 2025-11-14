@@ -1,5 +1,5 @@
-from typing import Dict
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 
 from analyzer import URLAnalyzer
 from lists import PhishingListChecker

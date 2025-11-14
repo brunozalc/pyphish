@@ -1,0 +1,9 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      SECRET_KEY: dev-key-change-in-production
+    restart: unless-stopped
+
