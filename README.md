@@ -52,9 +52,7 @@ python main.py
 
 ## Vídeo de demonstração
 
-<video src="./assets/demo.mp4" width="320" height="240" controls muted playsinline>
-  Seu navegador não suporta o elemento de vídeo.
-</video>
+https://github.com/user-attachments/assets/8a858c6b-16c3-44e3-bdb0-5bf1abeb5cdb
 
 ## Capturas de tela
 
