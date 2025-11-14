@@ -79,3 +79,31 @@ pf/
 │   └── ...
 └── cache/
 ```
+
+---
+
+## Conceitos
+
+Segue uma relação dos conceitos cumpridos:
+
+### Conceito C
+
+| *Feature* | Feita? |
+| --------- | ------ |
+| Usar listas de phishing conhecidas | ✅ |
+| Identificar características básicas suspeitas | ✅ |
+| Exibição web simples | ✅ |  
+
+### Conceito B
+
+| *Feature* | Feita? |
+| --------- | ------ |
+| Análise heuristica avançada (SSL, idade do domínio, resolução DNS, distância de Levenshtein, etc.) | ✅ |
+| Interface web interativa (dashboard, gráficos, exportação de logs, etc.) | ✅ |
+
+### Conceito A
+
+| *Feature* | Feita? |
+| --------- | ------ |
+| Plugin para navegador com configurações, bloqueio automático, notificações e análise por _hover_ do mouse | ✅ |
+| Configurações avançadas (análise de emails, verficação de URLs encurtadas, análise de comportamento) | ✅ |
