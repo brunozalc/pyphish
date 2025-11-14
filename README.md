@@ -52,7 +52,7 @@ python main.py
 
 ## Vídeo de demonstração
 
-<video src="assets/demo.mp4" controls width="640">
+<video src="assets/demo.mp4" controls muted playsinline width="640">
   <!-- fallback text -->
   your browser does not support the video tag.
 </video>
