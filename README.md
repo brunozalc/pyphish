@@ -52,7 +52,7 @@ python main.py
 
 ## Vídeo de demonstração
 
-<img src="assets/demo.mov" alt="Demonstração da extensão" width="400px" />
+<img src="assets/demo.mp4" alt="Demonstração da extensão" width="400px" />
 
 ## Capturas de tela
 
